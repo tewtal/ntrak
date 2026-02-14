@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=ntrak
+Exec=ntrak
+Icon=ntrak
+Categories=Game;AudioVideo;
+Terminal=false

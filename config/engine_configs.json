@@ -1,0 +1,688 @@
+[
+  {
+    "id": "super_metroid",
+    "name": "Super Metroid",
+    "entryPoint": "0x1500",
+    "sampleHeaderPtr": "0x1575",
+    "instrumentHeaderPtrLo": "0x190C",
+    "instrumentHeaderPtrHi": "0x190F",
+    "echoBuffer": "0x1500",
+    "echoBufferLen": "0x1000",
+    "songIndexPtr": "0x1745",
+    "engineBytes": "20 CD CF BD E8 00 5D AF C8 E0 D0 FB CD 00 E8 00",
+    "reserved": [
+      {
+        "name": "Engine",
+        "from": "0x1500",
+        "to": "0x530D"
+      },
+      {
+        "name": "RAM",
+        "from": "0x0000",
+        "to": "0x0500"
+      },
+      {
+        "name": "Engine patches",
+        "from": "0x56E2",
+        "to": "0x5800"
+      },
+      {
+        "name": "Engine tables",
+        "from": "0x5800",
+        "to": "0x5820"
+      }
+    ],
+    "playbackHooks": {
+      "tickTrigger": {
+        "op": "execute",
+        "address": "0x1601"
+      },
+      "patternTrigger": {
+        "op": "execute",
+        "address": "0x17B7"
+      }
+    },
+    "extensionVcmdPrefix": "0xFF",
+    "extensions": [
+      {
+        "name": "Legato Mode",
+        "description": "Adds smooth note transitions (VCMD FB)",
+        "code": {
+          "address": "0x56E2",
+          "bytes": "E8FFD501035F1657F02AE41C0447C41C6FE41C2447D007E4478D5C3F1E175FF11CADC8900CF007E4478D5C3F1E175F30165F3E162DE44748FF041CC41CAE6F"
+        },
+        "hooks": [
+          {
+            "name": "VCMD Parameter Count",
+            "address": "0x1BBB",
+            "bytes": "01"
+          },
+          {
+            "name": "VCMD Jump Table Entry",
+            "address": "0x1B98",
+            "bytes": "EA56"
+          },
+          {
+            "name": "Init Hook",
+            "address": "0x175D",
+            "bytes": "3FE2560000"
+          },
+          {
+            "name": "Rest Check Hook",
+            "address": "0x163A",
+            "bytes": "5F0357"
+          },
+          {
+            "name": "Note End Hook",
+            "address": "0x1CEA",
+            "bytes": "5FF356"
+          }
+        ],
+        "vcmds": [
+          {
+            "id": "0xFB",
+            "name": "Legato",
+            "description": "Toggle smooth note transitions. 0=Off, 1=On.",
+            "parameters": [
+              {
+                "name": "State",
+                "type": "enum",
+                "options": {
+                  "0": "Off",
+                  "1": "On"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Arpeggio",
+        "description": "Adds Impulse Tracker-style arpeggio effect (VCMD FC)",
+        "code": {
+          "address": "0x5728",
+          "bytes": "D50004D52004D521046FD52004E800D521046FD50001D521046F3F3B1BF52004F025F52104BC68039002E800D52104F0146802F006F520049F2F03F52004280F608411C411E2136F3F3B1BF52004F006F521045F57576F"
+        },
+        "hooks": [
+          {
+            "name": "VCMD Parameter Count",
+            "address": "0x1BBC",
+            "bytes": "01"
+          },
+          {
+            "name": "VCMD Jump Table Entry",
+            "address": "0x1B9A",
+            "bytes": "3257"
+          },
+          {
+            "name": "Init Hook",
+            "address": "0x1773",
+            "bytes": "3F2857"
+          },
+          {
+            "name": "Note Reset Hook",
+            "address": "0x1665",
+            "bytes": "3F3B57"
+          },
+          {
+            "name": "Tick Path Hook",
+            "address": "0x1D23",
+            "bytes": "3F4257"
+          },
+          {
+            "name": "Non-tick Path Hook",
+            "address": "0x1DA8",
+            "bytes": "3F7057"
+          }
+        ],
+        "vcmds": [
+          {
+            "id": "0xFC",
+            "name": "Arpeggio",
+            "description": "Arpeggio effect. High nibble = semitone offset 1, low nibble = semitone offset 2. Cycles base/+x/+y each tick. 00=Off.",
+            "parameters": [
+              {
+                "name": "Offsets",
+                "type": "byte"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "No Pattern KOFF",
+        "description": "Disable key-off at pattern end (VCMD FD). Prevents notes from being cut on pattern transitions.",
+        "code": {
+          "address": "0x5780",
+          "bytes": "F012E82AC5C61C6FD4B1D4C12DE823C5C61CAE6FE823C5C61C6F"
+        },
+        "hooks": [
+          {
+            "name": "VCMD Parameter Count",
+            "address": "0x1BBD",
+            "bytes": "01"
+          },
+          {
+            "name": "VCMD Jump Table Entry",
+            "address": "0x1B9C",
+            "bytes": "8057"
+          },
+          {
+            "name": "Init Hook",
+            "address": "0x1776",
+            "bytes": "3F885700"
+          }
+        ],
+        "vcmds": [
+          {
+            "id": "0xFD",
+            "name": "No Pattern KOFF",
+            "description": "Disable key-off at pattern end. Prevents notes from being cut when the sequence moves to a new pattern. 0=Off (normal), 1=On.",
+            "parameters": [
+              {
+                "name": "State",
+                "type": "enum",
+                "options": {
+                  "0": "Off",
+                  "1": "On"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "zelda_alttp",
+    "name": "A Link to the Past",
+    "entryPoint": "0x0800",
+    "sampleHeaderPtr": "0x082D",
+    "instrumentHeaderPtrLo": "0x0C79",
+    "instrumentHeaderPtrHi": "0x0C7C",
+    "echoBufferPtr": "0x0E62",
+    "echoBufferLen": "0x1000",
+    "songIndexPtr": "0x0AAB",
+    "engineBytes": "20 CD CF BD E8 00 5D AF C8 E0 D0 FB CD 00 D5 00",
+    "reserved": [
+      {
+        "name": "Engine",
+        "from": "0x0800",
+        "to": "0x17A0"
+      },
+      {
+        "name": "SFX",
+        "from": "0x17A0",
+        "to": "0x2850"
+      },
+      {
+        "name": "RAM",
+        "from": "0x0000",
+        "to": "0x0800"
+      },
+      {
+        "name": "Engine tables",
+        "from": "0x3D96",
+        "to": "0x3DB0"
+      },
+      {
+        "name": "Engine patches",
+        "from": "0x3F00",
+        "to": "0x4000"
+      }
+    ],
+    "playbackHooks": {
+      "tickTrigger": {
+        "op": "execute",
+        "address": "0x08C2"
+      },
+      "patternTrigger": {
+        "op": "execute",
+        "address": "0x0B16"
+      }
+    },
+    "extensionVcmdPrefix": "0xFF",
+    "extensions": [
+      {
+        "name": "VCMD Dispatch",
+        "description": "Dispatches custom VCMDs (FB/FC/FD) to extension handlers. Required by all custom VCMD extensions.",
+        "code": {
+          "address": "0x3F00",
+          "bytes": "68FBF00C68FDF03868FCF0565F4A0C"
+        },
+        "hooks": [
+          {
+            "name": "VCMD Dispatcher",
+            "address": "0x0BC0",
+            "bytes": "3F003F"
+          }
+        ],
+        "vcmds": [],
+        "enabledByDefault": true
+      },
+      {
+        "name": "Legato Mode",
+        "description": "Adds smooth note transitions (VCMD FB)",
+        "code": {
+          "address": "0x3F10",
+          "bytes": "E730BB30D002BB31F007E41C0447C41C6F2DE44748FF241CC41CAE6FE41C2447D005E4473FEF096FD5FF03C41C6F"
+        },
+        "hooks": [
+          {
+            "name": "VCMD Parameter Count",
+            "address": "0x0F3B",
+            "bytes": "01"
+          },
+          {
+            "name": "Legato KOFF Hook",
+            "address": "0x105C",
+            "bytes": "3F2C3F"
+          },
+          {
+            "name": "Init Hook",
+            "address": "0x0AD9",
+            "bytes": "3F383F"
+          }
+        ],
+        "vcmds": [
+          {
+            "id": "0xFB",
+            "name": "Legato",
+            "description": "Toggle smooth note transitions. 0=Off, 1=On.",
+            "parameters": [
+              {
+                "name": "State",
+                "type": "enum",
+                "options": {
+                  "0": "Off",
+                  "1": "On"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "Arpeggio",
+        "description": "Adds arpeggio effect (VCMD FC)",
+        "code": {
+          "address": "0x3F62",
+          "bytes": "E730BB30D002BB31D52004E800D521046FD50001D521046F3FC30EF52004F025F52104BC68039002E800D52104F0146802F006F520049F2F03F52004280F608411C411E2136F3FC30EF52004F006F521045F8F3F6FD58002D52004D521046F"
+        },
+        "hooks": [
+          {
+            "name": "VCMD Parameter Count",
+            "address": "0x0F3C",
+            "bytes": "01"
+          },
+          {
+            "name": "Arpeggio Note Reset",
+            "address": "0x0936",
+            "bytes": "3F733F"
+          },
+          {
+            "name": "Arpeggio Tick Path",
+            "address": "0x107E",
+            "bytes": "3F7A3F"
+          },
+          {
+            "name": "Arpeggio Non-tick Path",
+            "address": "0x1103",
+            "bytes": "3FA83F"
+          },
+          {
+            "name": "Init Hook",
+            "address": "0x0AD6",
+            "bytes": "3FB73F"
+          }
+        ],
+        "vcmds": [
+          {
+            "id": "0xFC",
+            "name": "Arpeggio",
+            "description": "Set arpeggio offsets. High nibble = offset 1, low nibble = offset 2. 00 = off.",
+            "parameters": [
+              {
+                "name": "Offsets",
+                "type": "byte"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "No Pattern KOFF",
+        "description": "Prevents key-off at pattern boundaries (VCMD FD)",
+        "code": {
+          "address": "0x3F40",
+          "bytes": "E730BB30D002BB31F006E82AC534106FE823C534106FD5F0022DE823C53410AE6F"
+        },
+        "hooks": [
+          {
+            "name": "VCMD Parameter Count",
+            "address": "0x0F3D",
+            "bytes": "01"
+          },
+          {
+            "name": "Init Hook",
+            "address": "0x0AD3",
+            "bytes": "3F563F"
+          }
+        ],
+        "vcmds": [
+          {
+            "id": "0xFD",
+            "name": "No Pattern KOFF",
+            "description": "Toggle pattern boundary key-off suppression. 0=Off (normal), 1=On (suppress).",
+            "parameters": [
+              {
+                "name": "State",
+                "type": "enum",
+                "options": {
+                  "0": "Off",
+                  "1": "On"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "smw2_yoshis_island",
+    "name": "Super Mario World 2: Yoshi's Island",
+    "entryPoint": "0x0400",
+    "sampleHeaderPtr": "0x042D",
+    "instrumentHeaderPtrLo": "0x08C4",
+    "instrumentHeaderPtrHi": "0x08C7",
+    "echoBufferPtr": "0x0AD6",
+    "echoBufferLen": "0x1000",
+    "songIndexPtr": "0x06F3",
+    "engineBytes": "20 CD CF BD E8 00 5D AF C8 E0 D0 FB CD 00 D5 00",
+    "reserved": [
+      {
+        "name": "Engine",
+        "from": "0x0400",
+        "to": "0x264C"
+      },
+      {
+        "name": "Engine",
+        "from": "0x3E20",
+        "to": "0x3EBB"
+      },
+      {
+        "name": "Engine tables",
+        "from": "0x3FE8",
+        "to": "0x4000"
+      },
+      {
+        "name": "RAM",
+        "from": "0x0000",
+        "to": "0x0400"
+      }
+    ],
+    "playbackHooks": {
+      "tickTrigger": {
+        "op": "execute",
+        "address": "0x04B9"
+      },
+      "patternTrigger": {
+        "op": "execute",
+        "address": "0x0771"
+      }
+    }
+  },
+  {
+    "id": "tmnt4_turtles_in_time_wip",
+    "name": "(WIP) TMNT IV: Turtles in Time",
+    "entryPoint": "0x0400",
+    "sampleHeaderPtr": "0x046F",
+    "instrumentHeaderPtrLo": "0x0AA6",
+    "instrumentHeaderPtrHi": "0x0AA9",
+    "echoBufferPtr": "0x0430",
+    "echoBufferLen": "0x0000",
+    "songIndexPtr": "0x08A0",
+    "songTriggerPort": "0x00",
+    "songTriggerOffset": "0x80",
+    "engineBytes": "20 CD CF BD E8 00 5D AF C8 E0 D0 FB 8D 02 DA 14",
+    "reserved": [
+      {
+        "name": "Engine",
+        "from": "0x0400",
+        "to": "0x3000"
+      },
+      {
+        "name": "RAM",
+        "from": "0x0000",
+        "to": "0x0400"
+      }
+    ],
+    "playbackHooks": {
+      "tickTrigger": {
+        "op": "execute",
+        "address": "0x0517",
+        "count": 6
+      },
+      "patternTrigger": {
+        "op": "execute",
+        "address": "0x0972"
+      }
+    }
+  },
+  {
+    "id": "super_mario_world",
+    "name": "Super Mario World",
+    "entryPoint": "0x0500",
+    "sampleHeaderPtr": "0x129E",
+    "instrumentHeaderPtrLo": "0x0D51",
+    "instrumentHeaderPtrHi": "0x0D54",
+    "echoBuffer": "0x8000",
+    "echoBufferLen": "0x2000",
+    "songIndexPtr": "0x0B67",
+    "songTriggerPort": "0x02",
+    "instrumentEntryBytes": 5,
+    "engineBytes": "20 CD CF BD E8 00 C5 86 03 C5 87 03 C5 88 03 C5",
+    "reserved": [
+      {
+        "name": "Engine",
+        "from": "0x0500",
+        "to": "0x1360"
+      },
+      {
+        "name": "RAM",
+        "from": "0x0000",
+        "to": "0x0500"
+      },
+      {
+        "name": "SFX",
+        "from": "0x5570",
+        "to": "0x5F46"
+      }
+    ],
+    "playbackHooks": {
+      "tickTrigger": {
+        "op": "execute",
+        "address": "0x0BC0"
+      },
+      "patternTrigger": {
+        "op": "execute",
+        "address": "0x0C04"
+      }
+    },
+    "cmdMap": {
+      "noteStart": "0x80",
+      "noteEnd": "0xC5",
+      "tie": "0xC6",
+      "restStart": "0xC7",
+      "restEnd": "0xCF",
+      "restWrite": "0xC7",
+      "percussionStart": "0xD0",
+      "percussionEnd": "0xD9",
+      "vcmdStart": "0xDA",
+      "strictReadVcmdMap": true,
+      "strictWriteVcmdMap": true,
+      "readVcmdMap": {
+        "0xDA": "0xE0",
+        "0xDB": "0xE1",
+        "0xDC": "0xE2",
+        "0xDD": "0xF9",
+        "0xDE": "0xE3",
+        "0xDF": "0xE4",
+        "0xE0": "0xE5",
+        "0xE1": "0xE6",
+        "0xE2": "0xE7",
+        "0xE3": "0xE8",
+        "0xE4": "0xE9",
+        "0xE5": "0xEB",
+        "0xE6": "0xEC",
+        "0xE7": "0xED",
+        "0xE8": "0xEE",
+        "0xE9": "0xEF",
+        "0xEA": "0xF0",
+        "0xEB": "0xF1",
+        "0xEC": "0xF2",
+        "0xED": "0xF3",
+        "0xEE": "0xF4",
+        "0xEF": "0xF5",
+        "0xF0": "0xF6",
+        "0xF1": "0xF7",
+        "0xF2": "0xF8"
+      },
+      "writeVcmdMap": {
+        "0xE0": "0xDA",
+        "0xE1": "0xDB",
+        "0xE2": "0xDC",
+        "0xE3": "0xDE",
+        "0xE4": "0xDF",
+        "0xE5": "0xE0",
+        "0xE6": "0xE1",
+        "0xE7": "0xE2",
+        "0xE8": "0xE3",
+        "0xE9": "0xE4",
+        "0xEB": "0xE5",
+        "0xEC": "0xE6",
+        "0xED": "0xE7",
+        "0xEE": "0xE8",
+        "0xEF": "0xE9",
+        "0xF0": "0xEA",
+        "0xF1": "0xEB",
+        "0xF2": "0xEC",
+        "0xF3": "0xED",
+        "0xF4": "0xEE",
+        "0xF5": "0xEF",
+        "0xF6": "0xF0",
+        "0xF7": "0xF1",
+        "0xF8": "0xF2",
+        "0xF9": "0xDD"
+      }
+    }
+  },
+  {
+    "id": "super_mario_world_addmusick",
+    "name": "Super Mario World (AddmusicK)",
+    "entryPoint": "0x0400",
+    "defaultDspTablePtr": "0x041C",
+    "instrumentHeaderPtrLo": "0x0D9D",
+    "instrumentHeaderPtrHi": "0x0DA0",
+    "echoBufferLen": "0x0000",
+    "songIndexPtr": "0x0A20",
+    "songTriggerPort": "0x02",
+    "instrumentEntryBytes": 5,
+    "engineBytes": "20 CD CF BD E8 00 FD D6 00 01 D6 00 02 D6 00 03",
+    "reserved": [
+      {
+        "name": "Engine",
+        "from": "0x0400",
+        "to": "0x188F"
+      },
+      {
+        "name": "RAM",
+        "from": "0x0000",
+        "to": "0x0400"
+      },
+      {
+        "name": "SFX",
+        "from": "0x5570",
+        "to": "0x5F46"
+      }
+    ],
+    "playbackHooks": {
+      "tickTrigger": {
+        "op": "execute",
+        "address": "0x0AFC"
+      },
+      "patternTrigger": {
+        "op": "execute",
+        "address": "0x0B29"
+      }
+    },
+    "cmdMap": {
+      "noteStart": "0x80",
+      "noteEnd": "0xC5",
+      "tie": "0xC6",
+      "restStart": "0xC7",
+      "restEnd": "0xCF",
+      "restWrite": "0xC7",
+      "percussionStart": "0xD0",
+      "percussionEnd": "0xD9",
+      "vcmdStart": "0xDA",
+      "strictReadVcmdMap": true,
+      "strictWriteVcmdMap": true,
+      "readVcmdMap": {
+        "0xDA": "0xE0",
+        "0xDB": "0xE1",
+        "0xDC": "0xE2",
+        "0xDD": "0xF9",
+        "0xDE": "0xE3",
+        "0xDF": "0xE4",
+        "0xE0": "0xE5",
+        "0xE1": "0xE6",
+        "0xE2": "0xE7",
+        "0xE3": "0xE8",
+        "0xE4": "0xE9",
+        "0xE5": "0xEB",
+        "0xE6": "0xEC",
+        "0xE7": "0xED",
+        "0xE8": "0xEE",
+        "0xE9": "0xEF",
+        "0xEA": "0xF0",
+        "0xEB": "0xF1",
+        "0xEC": "0xF2",
+        "0xED": "0xF3",
+        "0xEE": "0xF4",
+        "0xEF": "0xF5",
+        "0xF0": "0xF6",
+        "0xF1": "0xF7",
+        "0xF2": "0xF8"
+      },
+      "writeVcmdMap": {
+        "0xE0": "0xDA",
+        "0xE1": "0xDB",
+        "0xE2": "0xDC",
+        "0xE3": "0xDE",
+        "0xE4": "0xDF",
+        "0xE5": "0xE0",
+        "0xE6": "0xE1",
+        "0xE7": "0xE2",
+        "0xE8": "0xE3",
+        "0xE9": "0xE4",
+        "0xEB": "0xE5",
+        "0xEC": "0xE6",
+        "0xED": "0xE7",
+        "0xEE": "0xE8",
+        "0xEF": "0xE9",
+        "0xF0": "0xEA",
+        "0xF1": "0xEB",
+        "0xF2": "0xEC",
+        "0xF3": "0xED",
+        "0xF4": "0xEE",
+        "0xF5": "0xEF",
+        "0xF6": "0xF0",
+        "0xF7": "0xF1",
+        "0xF8": "0xF2",
+        "0xF9": "0xDD"
+      }
+    }
+  }
+]

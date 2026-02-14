@@ -1,0 +1,149 @@
+# NTRAK Clang-Tidy Configuration
+# Requires clang-tidy 17+
+# Usage: clang-tidy -p build src/**/*.cpp
+
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  misc-*,
+  -misc-non-private-member-variables-in-classes,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  readability-*,
+  -readability-magic-numbers,
+  -readability-identifier-length,
+  -readability-else-after-return,
+
+WarningsAsErrors: ''
+
+# Only show warnings from project headers — excludes system and third-party libs
+HeaderFilterRegex: '.*/include/ntrak/.*\.hpp$'
+
+# Suppress warnings in system/third-party headers
+SystemHeaders: false
+
+# Paths to ignore entirely (adjust to match your libs/ layout)
+ExcludeHeaderFilterRegex: '.*(libs|build|third_party|_deps).*'
+
+CheckOptions:
+  # ---------------------------------------------------------------------------
+  # Naming conventions — enforced by readability-identifier-naming
+  # ---------------------------------------------------------------------------
+
+  # Namespaces: snake_case
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+
+  # Classes and Structs: PascalCase
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.StructCase
+    value: CamelCase
+
+  # Enums: PascalCase
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantCase
+    value: CamelCase
+
+  # Functions and methods: camelCase
+  - key: readability-identifier-naming.FunctionCase
+    value: camelBack
+  - key: readability-identifier-naming.MethodCase
+    value: camelBack
+
+  # Local variables: camelCase
+  - key: readability-identifier-naming.LocalVariableCase
+    value: camelBack
+  - key: readability-identifier-naming.ParameterCase
+    value: camelBack
+
+  # Member variables: camelCase with trailing _
+  - key: readability-identifier-naming.MemberCase
+    value: camelBack
+  - key: readability-identifier-naming.MemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: '_'
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: '_'
+
+  # Public member variables in structs: camelCase, no suffix (plain data)
+  - key: readability-identifier-naming.PublicMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.PublicMemberSuffix
+    value: ''
+
+  # Static member variables: camelCase with trailing _
+  - key: readability-identifier-naming.ClassMemberCase
+    value: camelBack
+  - key: readability-identifier-naming.ClassMemberSuffix
+    value: '_'
+
+  # Constants: kPascalCase
+  - key: readability-identifier-naming.ConstexprVariableCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstexprVariablePrefix
+    value: 'k'
+  - key: readability-identifier-naming.StaticConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.StaticConstantPrefix
+    value: 'k'
+  - key: readability-identifier-naming.GlobalConstantCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalConstantPrefix
+    value: 'k'
+
+  # Macros: SCREAMING_SNAKE_CASE
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+
+  # Template parameters: PascalCase
+  - key: readability-identifier-naming.TemplateParameterCase
+    value: CamelCase
+
+  # Type aliases: PascalCase
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+
+  # Concept names: PascalCase
+  - key: readability-identifier-naming.ConceptCase
+    value: CamelCase
+
+  # ---------------------------------------------------------------------------
+  # Other check options
+  # ---------------------------------------------------------------------------
+
+  # Prefer using over typedef
+  - key: modernize-use-using.IgnoreMacros
+    value: true
+
+  # Flag C-style casts
+  - key: cppcoreguidelines-pro-type-cstyle-cast.StrictMode
+    value: true
+
+  # Prefer scoped enums
+  - key: modernize-use-default-member-init.UseAssignment
+    value: true
+
+  # Braces around statements
+  - key: readability-braces-around-statements.ShortStatementLines
+    value: 0
+
+  # Include cleaner
+  - key: misc-include-cleaner.IgnoreHeaders
+    value: ''

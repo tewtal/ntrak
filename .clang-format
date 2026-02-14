@@ -1,0 +1,146 @@
+# NTRAK Clang-Format Configuration
+# Requires clang-format 17+
+# Usage: clang-format -i src/**/*.cpp include/**/*.hpp
+
+Language: Cpp
+Standard: c++20
+BasedOnStyle: Google
+
+# ---------------------------------------------------------------------------
+# Indentation
+# ---------------------------------------------------------------------------
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+IndentCaseLabels: false
+IndentPPDirectives: None
+NamespaceIndentation: None
+AccessModifierOffset: -4
+
+# ---------------------------------------------------------------------------
+# Line length
+# ---------------------------------------------------------------------------
+ColumnLimit: 120
+
+# ---------------------------------------------------------------------------
+# Braces — same-line (Attach)
+# ---------------------------------------------------------------------------
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: false
+  AfterClass: false
+  AfterControlStatement: Never
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  BeforeLambdaBody: false
+  BeforeWhile: false
+  IndentBraces: false
+  SplitEmptyFunction: false
+  SplitEmptyRecord: false
+  SplitEmptyNamespace: false
+
+# Always use braces for control statements
+InsertBraces: true
+
+# ---------------------------------------------------------------------------
+# Spacing
+# ---------------------------------------------------------------------------
+SpaceAfterCStyleCast: false
+SpaceAfterLogicalNot: false
+SpaceAfterTemplateKeyword: true
+SpaceBeforeAssignmentOperators: true
+SpaceBeforeCpp11BracedList: false
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyBlock: false
+SpaceInEmptyParentheses: false
+SpacesInAngles: Never
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+
+# ---------------------------------------------------------------------------
+# Alignment
+# ---------------------------------------------------------------------------
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignConsecutiveMacros: false
+AlignEscapedNewlines: Left
+AlignOperands: Align
+AlignTrailingComments: true
+
+# ---------------------------------------------------------------------------
+# Line breaking
+# ---------------------------------------------------------------------------
+AllowAllParametersOfDeclarationOnNextLine: true
+AllowShortBlocksOnASingleLine: Empty
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: Inline
+AllowShortLoopsOnASingleLine: false
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakInheritanceList: BeforeColon
+PackConstructorInitializers: BinPack
+
+# ---------------------------------------------------------------------------
+# Includes — match the style guide ordering
+# ---------------------------------------------------------------------------
+IncludeBlocks: Regroup
+IncludeCategories:
+  # 0. GLAD must always be included before any other OpenGL/windowing header
+  - Regex: '^<glad/'
+    Priority: 0
+  # 1. Corresponding header (auto-detected by clang-format)
+  # 2. Project headers
+  - Regex: '^"ntrak/'
+    Priority: 2
+  - Regex: '^"'
+    Priority: 3
+  # 3. Third-party headers
+  - Regex: '^<(imgui|spdlog|SDL|GLFW|fmt|nlohmann|toml|catch2|gtest).*>'
+    Priority: 4
+  # 4. Standard library
+  - Regex: '^<'
+    Priority: 5
+SortIncludes: CaseSensitive
+
+# ---------------------------------------------------------------------------
+# Miscellaneous
+# ---------------------------------------------------------------------------
+PointerAlignment: Left
+ReferenceAlignment: Left
+ReflowComments: true
+SortUsingDeclarations: true
+EmptyLineBeforeAccessModifier: Always
+EmptyLineAfterAccessModifier: Never
+SeparateDefinitionBlocks: Always
+MaxEmptyLinesToKeep: 1
+InsertNewlineAtEOF: true
+
+# Keep short namespace closing comments
+FixNamespaceComments: true
+
+# Lambda
+LambdaBodyIndentation: Signature
+
+# Penalties — prefer breaking args over exceeding line limit
+PenaltyBreakAssignment: 25
+PenaltyBreakBeforeFirstCallParameter: 50
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 200

@@ -1,0 +1,206 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.2.3)"
+        required: true
+      prerelease:
+        description: "Mark as prerelease?"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+permissions:
+  contents: write  # tag push + create release + upload assets
+
+jobs:
+  tag_and_release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.vars.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute tag
+        id: vars
+        run: |
+          TAG="v${{ inputs.version }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create and push tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          TAG="${{ steps.vars.outputs.tag }}"
+
+          if git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+            echo "Tag ${TAG} already exists on origin."
+            exit 1
+          fi
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+      - name: Create GitHub Release (notes auto-generated)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: ${{ steps.vars.outputs.tag }}
+          generate_release_notes: true
+          prerelease: ${{ inputs.prerelease == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_windows:
+    needs: tag_and_release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag_and_release.outputs.tag }}
+
+      - name: Setup MSVC Dev Cmd
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: "3.29.0"
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_TESTING=OFF
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package (Windows zip)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $tag = "${{ needs.tag_and_release.outputs.tag }}"
+          Compress-Archive -Path build\bin\* -DestinationPath ("dist\ntrak-" + $tag + "-windows.zip") -Force
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag_and_release.outputs.tag }}
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build_linux_appimage:
+    needs: tag_and_release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout at tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.tag_and_release.outputs.tag }}
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build pkg-config \
+            libx11-dev xorg-dev \
+            libgl1-mesa-dev mesa-common-dev \
+            libgtk-3-dev \
+            clang-20 lld-20
+          sudo update-alternatives --install /usr/bin/clang clang /usr/bin/clang-20 100
+          sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-20 100
+          sudo update-alternatives --install /usr/bin/ld.lld ld.lld /usr/bin/ld.lld-20 100
+          sudo update-alternatives --install /usr/bin/lld lld /usr/bin/lld-20 100
+
+      - name: Setup Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Setup CMake
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: "3.29.0"
+
+      - name: Configure (Clang)
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_C_COMPILER=clang-20
+          -DCMAKE_CXX_COMPILER=clang++-20
+          -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=lld"
+          -DBUILD_TESTING=OFF          
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Prepare AppDir
+        run: |
+          rm -rf AppDir dist
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/ntrak
+
+          # Put the binary in usr/bin
+          cp build/bin/ntrak AppDir/usr/bin/ntrak
+
+          # Put assets+config+examples in usr/share/ntrak (FHS standard data location)
+          cp -r assets AppDir/usr/share/ntrak/assets
+          cp -r config AppDir/usr/share/ntrak/config
+          cp -r examples AppDir/usr/share/ntrak/examples
+          mkdir -p AppDir/usr/share/ntrak/docs
+          cp USER_GUIDE.md AppDir/usr/share/ntrak/docs/USER_GUIDE.md
+
+          # Desktop entry + icon (from repo)
+          cp packaging/ntrak.desktop AppDir/ntrak.desktop
+          cp packaging/ntrak.svg AppDir/ntrak.svg
+
+      - name: Download linuxdeploy
+        run: |
+          curl -L -o linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage
+
+      - name: Build AppImage
+        env:
+          TAG: ${{ needs.tag_and_release.outputs.tag }}
+          LINUXDEPLOY_PLUGINS: appimage
+        run: |
+          ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable AppDir/usr/bin/ntrak \
+            --desktop-file AppDir/ntrak.desktop \
+            --icon-file AppDir/ntrak.svg \
+            --output appimage
+
+          mkdir -p dist
+
+          # appimagetool says it will be named ntrak-x86_64.AppImage
+          if [ ! -f "ntrak-x86_64.AppImage" ]; then
+            echo "Expected AppImage not found. Listing current directory:"
+            ls -la
+            echo "Searching for any AppImage outputs:"
+            find . -maxdepth 2 -name "*.AppImage" -print -ls || true
+            exit 1
+          fi
+
+          mv "ntrak-x86_64.AppImage" "dist/ntrak-${TAG}-linux-x86_64.AppImage"
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.tag_and_release.outputs.tag }}
+          files: dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
