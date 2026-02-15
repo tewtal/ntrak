@@ -1,5 +1,6 @@
 add_library(ntrak_common
   Log.cpp
+  Logger.cpp
   Paths.cpp
   UserGuide.cpp
 )

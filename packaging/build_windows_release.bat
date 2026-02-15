@@ -24,6 +24,10 @@ xcopy /E /Y /I bin\Release\config ..\dist\ntrak-windows\config
 xcopy /E /Y /I bin\Release\examples ..\dist\ntrak-windows\examples
 xcopy /E /Y /I bin\Release\docs ..\dist\ntrak-windows\docs
 
+REM Copy Windows-specific files
+xcopy /Y ..\packaging\README_WINDOWS.txt ..\dist\ntrak-windows\README.txt
+xcopy /Y ..\packaging\check_system_windows.bat ..\dist\ntrak-windows\
+
 echo.
 echo Build complete! Output in dist\ntrak-windows\
 echo.
