@@ -9,6 +9,7 @@
 #include <optional>
 #include <ranges>
 #include <span>
+#include <string_view>
 #include <unordered_set>
 
 namespace ntrak::nspc {
@@ -491,11 +492,74 @@ uint32_t computeInstrumentTableScanEnd(const NspcEngineConfig& config, uint8_t e
 
     clampEnd(config.songIndexPointers);
     clampEnd(config.sampleHeaders);
+    clampEnd(config.percussionHeaders);
     for (const auto& region : config.reserved) {
         clampEnd(region.from);
     }
 
     return scanEnd;
+}
+
+bool isSmwV00Engine(const NspcEngineConfig& config) {
+    return config.engineVersion == "0.0";
+}
+
+void applyPercussionTableNotes(std::vector<NspcInstrument>& instruments, emulation::AramView aramView,
+                               const NspcEngineConfig& config) {
+    if (!isSmwV00Engine(config) || config.percussionHeaders == 0) {
+        return;
+    }
+
+
+    const auto percussionStartInstId = std::clamp((config.percussionHeaders - config.instrumentHeaders) / 5u, 0u, kMaxInstruments);
+
+    const auto commandMap = config.commandMap.value_or(NspcCommandMap{});
+    const int percussionCount = static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
+    if (percussionCount <= 0) {
+        return;
+    }
+
+    for (int i = 0; i < percussionCount; ++i) {
+        const uint32_t entryAddr = static_cast<uint32_t>(config.percussionHeaders) + static_cast<uint32_t>(i) * 6u;
+        if (entryAddr + 6u > kAramSize) {
+            break;
+        }
+
+        const uint8_t sampleIndex = aramView.read(static_cast<uint16_t>(entryAddr + 0u));
+        const uint8_t adsr1 = aramView.read(static_cast<uint16_t>(entryAddr + 1u));
+        const uint8_t adsr2 = aramView.read(static_cast<uint16_t>(entryAddr + 2u));
+        const uint8_t gain = aramView.read(static_cast<uint16_t>(entryAddr + 3u));
+        const uint8_t basePitch = aramView.read(static_cast<uint16_t>(entryAddr + 4u));
+        const uint8_t note = aramView.read(static_cast<uint16_t>(entryAddr + 5u));
+
+        const bool allFF =
+            (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF && basePitch == 0xFF && note == 0xFF);
+        const bool allZero = (sampleIndex == 0 && adsr1 == 0 && adsr2 == 0 && gain == 0 && basePitch == 0 && note == 0);
+        if (allFF || allZero) {
+            continue;
+        }
+
+        // Create a new instrument entry
+        const int instId = percussionStartInstId + i;
+        if (instId >= kMaxInstruments) {
+            break;
+        }
+
+        NspcInstrument inst{};
+        inst.id = instId;
+        inst.sampleIndex = sampleIndex;
+        inst.adsr1 = adsr1;
+        inst.adsr2 = adsr2;
+        inst.gain = gain;
+        inst.basePitchMult = basePitch;
+        inst.fracPitchMult = 0;
+        inst.percussionNote = note;
+        inst.originalAddr = static_cast<uint16_t>(entryAddr);
+        inst.contentOrigin = defaultContentOrigin(inst.id, config.defaultEngineProvidedInstrumentIds,
+                                                    config.hasDefaultEngineProvidedInstruments);
+
+        instruments.push_back(std::move(inst));
+    }
 }
 
 std::unordered_set<int> collectReferencedSampleIdsFromInstrumentTable(emulation::AramView aram,
@@ -793,6 +857,7 @@ void NspcProject::parseInstruments() {
             inst.gain = gain;
             inst.basePitchMult = basePitch;
             inst.fracPitchMult = fracPitch;
+            inst.percussionNote = 0;
             inst.originalAddr = static_cast<uint16_t>(addr);
             inst.contentOrigin = defaultContentOrigin(inst.id, engineConfig_.defaultEngineProvidedInstrumentIds,
                                                       engineConfig_.hasDefaultEngineProvidedInstruments);
@@ -800,6 +865,8 @@ void NspcProject::parseInstruments() {
             instruments_.push_back(std::move(inst));
         }
     }
+
+    applyPercussionTableNotes(instruments_, aramView, engineConfig_);
 }
 
 void NspcProject::parseSamples() {

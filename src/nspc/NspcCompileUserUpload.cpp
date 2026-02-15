@@ -17,6 +17,10 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
     NspcBuildOptions songBuildOptions = options;
     songBuildOptions.includeEngineExtensions = false;
     const uint8_t instrumentEntrySize = std::clamp<uint8_t>(engine.instrumentEntryBytes, 5, 6);
+    const bool isSmwV00Engine = (engine.engineVersion == "0.0");
+    const auto commandMap = engine.commandMap.value_or(NspcCommandMap{});
+    const int percussionCount =
+        static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
     const auto rangeEndDisplay = [](uint32_t endExclusive) -> uint16_t {
         if (endExclusive == 0) {
             return 0;
@@ -98,6 +102,31 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
             .bytes = std::move(bytes),
             .label = std::format("Instrument {:02X}", instrument.id),
         });
+
+        if (isSmwV00Engine && engine.percussionHeaders != 0 && instrument.id >= 0 && instrument.id < percussionCount) {
+            const uint32_t percussionAddress =
+                static_cast<uint32_t>(engine.percussionHeaders) + static_cast<uint32_t>(instrument.id) * 6u;
+            if (percussionAddress + 6u > kAramSize) {
+                return std::unexpected(std::format(
+                    "Percussion instrument {:02X} write at ${:04X} exceeds ARAM bounds", instrument.id,
+                    static_cast<uint16_t>(percussionAddress & 0xFFFFu)));
+            }
+
+            std::vector<uint8_t> percussionBytes;
+            percussionBytes.reserve(6);
+            percussionBytes.push_back(instrument.sampleIndex);
+            percussionBytes.push_back(instrument.adsr1);
+            percussionBytes.push_back(instrument.adsr2);
+            percussionBytes.push_back(instrument.gain);
+            percussionBytes.push_back(instrument.basePitchMult);
+            percussionBytes.push_back(instrument.percussionNote);
+
+            upload.chunks.push_back(NspcUploadChunk{
+                .address = static_cast<uint16_t>(percussionAddress),
+                .bytes = std::move(percussionBytes),
+                .label = std::format("Percussion {:02X}", instrument.id),
+            });
+        }
         hasUserContent = true;
     }
 

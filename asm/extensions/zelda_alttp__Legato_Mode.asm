@@ -14,6 +14,7 @@ LegatoVcmd:
     BNE LegatoVcmdRead
     INC $31+X
 LegatoVcmdRead:
+    CMP A, #$00
     BEQ LegatoClear
     MOV A, $1C
     OR A, $47
@@ -30,17 +31,35 @@ LegatoClear:
     POP A
     RET
 
-; Legato KOFF Hook (replaces call WriteToDSP_Checked at 0x105C)
-; On entry: A = channel bitmask ($47), Y = #$5C (KOFF register)
-; If legato active for this channel, skip the KOFF write.
-LegatoKoffHook:
+; Note End Hook (replaces JMP at 0x1058)
+; If legato active for this channel, skip KOFF write before jumping
+; back to the rest of the note-end routine.
+LegatoNoteEnd:
     MOV A, $1C
     AND A, $47
-    BNE LegatoKoffSkip
+    BNE LegatoNoteEndSkip
     MOV A, $47
+    MOV Y, #$5C
     CALL $09EF
-LegatoKoffSkip:
-    RET
+LegatoNoteEndSkip:
+    JMP $105F
+
+; Rest Check Hook (replaces JMP at 0x090B)
+; Handles rest/tie/note boundaries. If rest (Y >= C9), send KOFF
+; then jump to rest handler. If tie (Y == C8), skip KOFF.
+; Otherwise fall through to note handler.
+LegatoRestCheck:
+    CMP Y, #$C8
+    BCC LegatoRestCheckNote
+    BEQ LegatoRestCheckTie
+    MOV A, $47
+    MOV Y, #$5C
+    CALL $09EF
+LegatoRestCheckTie:
+    JMP $0901
+LegatoRestCheckNote:
+    JMP $090F
+
 
 ; Init Hook (replaces mov.w $03FF+X, A at 0x0AD9)
 ; A = 0 on entry (from init loop), clears legato bitfield.
@@ -52,8 +71,11 @@ LegatoInit:
 .patch $0F3B, "VCMD Parameter Count"
     .byte $01
 
-.patch $105C, "Legato KOFF Hook"
-    CALL LegatoKoffHook
+.patch $1058, "Note End Hook"
+    JMP LegatoNoteEnd
+
+.patch $090B, "Rest Check Hook"
+    JMP LegatoRestCheck    
 
 .patch $0AD9, "Init Hook"
     CALL LegatoInit

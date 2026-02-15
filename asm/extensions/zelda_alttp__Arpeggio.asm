@@ -1,7 +1,7 @@
 ; @game zelda_alttp
 ; @extension Arpeggio
 
-.org $3F62
+.org $3F82
 
 ; VCMD FC Handler
 ; Reads arpeggio offsets from data stream.

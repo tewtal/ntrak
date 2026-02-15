@@ -9,6 +9,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
 set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS ON CACHE BOOL "" FORCE)
 
+# Windows compatibility: static runtime linking to avoid redistributable dependencies
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 include(FetchContent)
 
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -112,6 +117,18 @@ if(WIN32)
   set_target_properties(ntrak PROPERTIES
     WIN32_EXECUTABLE $<NOT:$<CONFIG:Debug>>
   )
+
+  # Target Windows 10 (0x0A00) for better compatibility
+  target_compile_definitions(ntrak PRIVATE
+    WINVER=0x0A00
+    _WIN32_WINNT=0x0A00
+  )
+
+  # Embed application manifest for compatibility and DPI awareness
+  if(MSVC)
+    target_sources(ntrak PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/ntrak.manifest)
+    set_property(SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/packaging/ntrak.manifest PROPERTY VS_DEPLOYMENT_CONTENT TRUE)
+  endif()
 endif()
 
 add_subdirectory(src/common)

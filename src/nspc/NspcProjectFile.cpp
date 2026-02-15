@@ -26,6 +26,10 @@ constexpr std::string_view kPackedEventsEncoding = "eventpack_v1";
 constexpr uint8_t kPackedEventsEncodingVersion = 1;
 constexpr uint32_t kAramSize = NspcAramUsage::kTotalAramBytes;
 
+bool isSmwV00Engine(const NspcEngineConfig& config) {
+    return config.engineVersion == "0.0";
+}
+
 void writeOverlayInstrumentToAram(NspcProject& project, const NspcInstrument& instrument) {
     const auto& config = project.engineConfig();
     if (config.instrumentHeaders == 0 || instrument.id < 0) {
@@ -48,6 +52,25 @@ void writeOverlayInstrumentToAram(NspcProject& project, const NspcInstrument& in
     aram.write(base + 4u, instrument.basePitchMult);
     if (entrySize >= 6) {
         aram.write(base + 5u, instrument.fracPitchMult);
+    }
+
+    if (isSmwV00Engine(config) && config.percussionHeaders != 0 && instrument.id >= 0) {
+        const auto commandMap = config.commandMap.value_or(NspcCommandMap{});
+        const int percussionCount =
+            static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
+        if (instrument.id < percussionCount) {
+            const uint32_t percussionAddress =
+                static_cast<uint32_t>(config.percussionHeaders) + static_cast<uint32_t>(instrument.id) * 6u;
+            if (percussionAddress + 6u <= kAramSize) {
+                const uint16_t percussionBase = static_cast<uint16_t>(percussionAddress);
+                aram.write(percussionBase + 0u, instrument.sampleIndex);
+                aram.write(percussionBase + 1u, instrument.adsr1);
+                aram.write(percussionBase + 2u, instrument.adsr2);
+                aram.write(percussionBase + 3u, instrument.gain);
+                aram.write(percussionBase + 4u, instrument.basePitchMult);
+                aram.write(percussionBase + 5u, instrument.percussionNote);
+            }
+        }
     }
 }
 
@@ -1299,6 +1322,7 @@ json serializeInstrument(const NspcInstrument& instrument) {
         {"gain", instrument.gain},
         {"basePitchMult", instrument.basePitchMult},
         {"fracPitchMult", instrument.fracPitchMult},
+        {"percussionNote", instrument.percussionNote},
         {"originalAddr", instrument.originalAddr},
         {"contentOrigin", contentOriginToString(instrument.contentOrigin)},
     };
@@ -1327,6 +1351,11 @@ std::expected<NspcInstrument, std::string> parseInstrument(const json& value) {
         !parseRequiredByte("basePitchMult", instrument.basePitchMult) ||
         !parseRequiredByte("fracPitchMult", instrument.fracPitchMult)) {
         return std::unexpected("Instrument entry has invalid byte fields");
+    }
+    if (const auto percussionNote = parseU8(value.value("percussionNote", 0)); percussionNote.has_value()) {
+        instrument.percussionNote = *percussionNote;
+    } else {
+        return std::unexpected("Instrument entry has invalid percussionNote");
     }
     if (const auto addr = parseU16(value.value("originalAddr", 0)); addr.has_value()) {
         instrument.originalAddr = *addr;

@@ -360,6 +360,7 @@ struct NspcInstrument {
     uint8_t gain;
     uint8_t basePitchMult;
     uint8_t fracPitchMult;
+    uint8_t percussionNote = 0;
     std::string name;
     uint16_t originalAddr;
     NspcContentOrigin contentOrigin = NspcContentOrigin::EngineProvided;

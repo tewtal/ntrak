@@ -248,7 +248,7 @@
                 "description": "Dispatches custom VCMDs (FB/FC/FD) to extension handlers. Required by all custom VCMD extensions.",
                 "code": {
                     "address": "0x3F00",
-                    "bytes": "68FBF00C68FDF03868FCF0565F4A0C"
+                    "bytes": "68FBF00C68FDF05868FCF0765F4A0C"
                 },
                 "hooks": [
                     {
@@ -265,7 +265,7 @@
                 "description": "Adds smooth note transitions (VCMD FB)",
                 "code": {
                     "address": "0x3F10",
-                    "bytes": "E730BB30D002BB31F007E41C0447C41C6F2DE44748FF241CC41CAE6FE41C2447D005E4473FEF096FD5FF03C41C6F"
+                    "bytes": "E730BB30D002BB316800F007E41C0447C41C6F2DE44748FF241CC41CAE6FE41C2447D007E4478D5C3FEF095F5F10ADC8900CF007E4478D5C3FEF095F01095F0F09D5FF03C41C6F"
                 },
                 "hooks": [
                     {
@@ -281,7 +281,17 @@
                     {
                         "name": "Init Hook",
                         "address": "0x0AD9",
-                        "bytes": "3F383F"
+                        "bytes": "3F513F"
+                    },
+                    {
+                        "name": "Note End Hook",
+                        "address": "0x1058",
+                        "bytes": "5F2E3F"
+                    },
+                    {
+                        "name": "Rest Check Hook",
+                        "address": "0x090B",
+                        "bytes": "5F3E3F"
                     }
                 ],
                 "vcmds": [
@@ -306,8 +316,8 @@
                 "name": "Arpeggio",
                 "description": "Adds arpeggio effect (VCMD FC)",
                 "code": {
-                    "address": "0x3F62",
-                    "bytes": "E730BB30D002BB31D52004E800D521046FD50001D521046F3FC30EF52004F025F52104BC68039002E800D52104F0146802F006F520049F2F03F52004280F608411C411E2136F3FC30EF52004F006F521045F8F3F6FD58002D52004D521046F"
+                    "address": "0x3F82",
+                    "bytes": "E730BB30D002BB31D52004E800D521046FD50001D521046F3FC30EF52004F025F52104BC68039002E800D52104F0146802F006F520049F2F03F52004280F608411C411E2136F3FC30EF52004F006F521045FAF3F6FD58002D52004D521046F"
                 },
                 "hooks": [
                     {
@@ -318,22 +328,22 @@
                     {
                         "name": "Arpeggio Note Reset",
                         "address": "0x0936",
-                        "bytes": "3F733F"
+                        "bytes": "3F933F"
                     },
                     {
                         "name": "Arpeggio Tick Path",
                         "address": "0x107E",
-                        "bytes": "3F7A3F"
+                        "bytes": "3F9A3F"
                     },
                     {
                         "name": "Arpeggio Non-tick Path",
                         "address": "0x1103",
-                        "bytes": "3FA83F"
+                        "bytes": "3FC83F"
                     },
                     {
                         "name": "Init Hook",
                         "address": "0x0AD6",
-                        "bytes": "3FB73F"
+                        "bytes": "3FD73F"
                     }
                 ],
                 "vcmds": [
@@ -354,7 +364,7 @@
                 "name": "No Pattern KOFF",
                 "description": "Prevents key-off at pattern boundaries (VCMD FD)",
                 "code": {
-                    "address": "0x3F40",
+                    "address": "0x3F60",
                     "bytes": "E730BB30D002BB31F006E82AC534106FE823C534106FD5F0022DE823C53410AE6F"
                 },
                 "hooks": [
@@ -366,7 +376,7 @@
                     {
                         "name": "Init Hook",
                         "address": "0x0AD3",
-                        "bytes": "3F563F"
+                        "bytes": "3F763F"
                     }
                 ],
                 "vcmds": [
@@ -472,11 +482,14 @@
     },
     {
         "id": "super_mario_world",
+        "engineVersion": "0.0",
         "name": "Super Mario World",
         "entryPoint": "0x0500",
         "sampleHeaderPtr": "0x129E",
         "instrumentHeaderPtrLo": "0x0D51",
         "instrumentHeaderPtrHi": "0x0D54",
+        "percussionHeaderPtrLo": "0x05D6",
+        "percussionHeaderPtrHi": "0x05D9",
         "echoBuffer": "0x8000",
         "echoBufferLen": "0x2000",
         "songIndexPtr": "0x0B67",
@@ -582,6 +595,7 @@
         "id": "super_mario_world_addmusick",
         "name": "Super Mario World (AddmusicK)",
         "entryPoint": "0x0400",
+        "engineVersion": "0.0",
         "defaultDspTablePtr": "0x041C",
         "instrumentHeaderPtrLo": "0x0D9D",
         "instrumentHeaderPtrHi": "0x0DA0",
@@ -617,6 +631,156 @@
                 "address": "0x0B29"
             }
         },
+        "extensionVcmdPrefix": "0xFF",
+        "extensions": [
+            {
+                "name": "AddmusicK Custom VCMDs",
+                "description": "Custom VCMDs used by AddmusicK.",
+                "code": {
+                    "address": "0xFFFF",
+                    "bytes": ""
+                },
+                "hooks": [],
+                "vcmds": [
+                    {
+                        "id": "0xF3",
+                        "name": "Sample Upload",
+                        "description": "Sample Upload",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0xF4",
+                        "name": "Misc Command",
+                        "description": "Misc",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0xF5",
+                        "name": "FIR Filter Command",
+                        "description": "FIR Filter",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0xFA",
+                        "name": "Misc Command 2",
+                        "description": "Misc 2",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0xFB",
+                        "name": "Arpeggio",
+                        "description": "Arpeggio",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0xFC",
+                        "name": "Unknown",
+                        "description": "Unknown",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0xFD",
+                        "name": "Tremolo Off",
+                        "description": "Tremolo Off",
+                        "parameters": []
+                    },
+                    {
+                        "id": "0xFE",
+                        "name": "Pitch Envelope Off",
+                        "description": "Pitch Envelope Off",
+                        "parameters": []
+                    },
+                    {
+                        "id": "0xFF",
+                        "name": "NOP",
+                        "description": "NOP",
+                        "parameters": []
+                    }
+                ]
+            }
+        ],
         "cmdMap": {
             "noteStart": "0x80",
             "noteEnd": "0xC5",
@@ -627,8 +791,147 @@
             "percussionStart": "0xD0",
             "percussionEnd": "0xD9",
             "vcmdStart": "0xDA",
-            "strictReadVcmdMap": true,
-            "strictWriteVcmdMap": true,
+            "strictReadVcmdMap": false,
+            "strictWriteVcmdMap": false,
+            "readVcmdMap": {
+                "0xDA": "0xE0",
+                "0xDB": "0xE1",
+                "0xDC": "0xE2",
+                "0xDD": "0xF9",
+                "0xDE": "0xE3",
+                "0xDF": "0xE4",
+                "0xE0": "0xE5",
+                "0xE1": "0xE6",
+                "0xE2": "0xE7",
+                "0xE3": "0xE8",
+                "0xE4": "0xE9",
+                "0xE5": "0xEB",
+                "0xE6": "0xEC",
+                "0xE7": "0xED",
+                "0xE8": "0xEE",
+                "0xE9": "0xEF",
+                "0xEA": "0xF0",
+                "0xEB": "0xF1",
+                "0xEC": "0xF2",
+                "0xED": "0xF3",
+                "0xEE": "0xF4",
+                "0xEF": "0xF5",
+                "0xF0": "0xF6",
+                "0xF1": "0xF7",
+                "0xF2": "0xF8"
+            },
+            "writeVcmdMap": {
+                "0xE0": "0xDA",
+                "0xE1": "0xDB",
+                "0xE2": "0xDC",
+                "0xE3": "0xDE",
+                "0xE4": "0xDF",
+                "0xE5": "0xE0",
+                "0xE6": "0xE1",
+                "0xE7": "0xE2",
+                "0xE8": "0xE3",
+                "0xE9": "0xE4",
+                "0xEB": "0xE5",
+                "0xEC": "0xE6",
+                "0xED": "0xE7",
+                "0xEE": "0xE8",
+                "0xEF": "0xE9",
+                "0xF0": "0xEA",
+                "0xF1": "0xEB",
+                "0xF2": "0xEC",
+                "0xF3": "0xED",
+                "0xF4": "0xEE",
+                "0xF5": "0xEF",
+                "0xF6": "0xF0",
+                "0xF7": "0xF1",
+                "0xF8": "0xF2",
+                "0xF9": "0xDD"
+            }
+        }
+    },
+    {
+        "id": "super_mario_world_custom",
+        "name": "Super Mario World (Custom)",
+        "entryPoint": "0x0400",
+        "engineVersion": "0.0",
+        "defaultDspTablePtr": "0x041C",
+        "instrumentHeaderPtrLo": "0x0D54",
+        "instrumentHeaderPtrHi": "0x0D57",
+        "percussionHeaderPtrLo": "0x0543",
+        "percussionHeaderPtrHi": "0x0546",
+        "echoBufferLen": "0x0000",
+        "songIndexPtr": "0x0A85",
+        "songTriggerPort": "0x02",
+        "instrumentEntryBytes": 5,
+        "engineBytes": "20 CD CF BD E8 00 8D 00 D6 00 01 FE FB D6 00 02",
+        "reserved": [
+            {
+                "name": "Engine",
+                "from": "0x0400",
+                "to": "0x188F"
+            },
+            {
+                "name": "RAM",
+                "from": "0x0000",
+                "to": "0x0400"
+            },
+            {
+                "name": "SFX",
+                "from": "0x5570",
+                "to": "0x5F46"
+            }
+        ],
+        "playbackHooks": {
+            "tickTrigger": {
+                "op": "execute",
+                "address": "0x0AFC"
+            },
+            "patternTrigger": {
+                "op": "execute",
+                "address": "0x0B29"
+            }
+        },
+        "extensionVcmdPrefix": "0xFF",
+        "extensions": [
+            {
+                "name": "Unknown VCMD Extension",
+                "description": "F4",
+                "code": {
+                    "address": "0xFFFF",
+                    "bytes": ""
+                },
+                "hooks": [],
+                "vcmds": [
+                    {
+                        "id": "0xF4",
+                        "name": "Unknown",
+                        "description": "Who knows",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ],
+        "cmdMap": {
+            "noteStart": "0x80",
+            "noteEnd": "0xC5",
+            "tie": "0xC6",
+            "restStart": "0xC7",
+            "restEnd": "0xCF",
+            "restWrite": "0xC7",
+            "percussionStart": "0xD0",
+            "percussionEnd": "0xD9",
+            "vcmdStart": "0xDA",
+            "strictReadVcmdMap": false,
+            "strictWriteVcmdMap": false,
             "readVcmdMap": {
                 "0xDA": "0xE0",
                 "0xDB": "0xE1",

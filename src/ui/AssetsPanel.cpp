@@ -517,6 +517,26 @@ bool AssetsPanel::writeInstrumentToAram(const nspc::NspcInstrument& instrument) 
         aram.write(address + 5, instrument.fracPitchMult);
     }
 
+    if (config.engineVersion == "0.0" && config.percussionHeaders != 0) {
+        const auto commandMap = config.commandMap.value_or(nspc::NspcCommandMap{});
+        const int percussionCount =
+            static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
+        if (instrument.id >= 0 && instrument.id < percussionCount) {
+            const uint32_t percussionAddress32 =
+                static_cast<uint32_t>(config.percussionHeaders) + static_cast<uint32_t>(instrument.id) * 6u;
+            if (percussionAddress32 + 6u <= kAramSize) {
+                const uint16_t percussionAddress = static_cast<uint16_t>(percussionAddress32);
+                aram.write(percussionAddress + 0, instrument.sampleIndex);
+                aram.write(percussionAddress + 1, instrument.adsr1);
+                aram.write(percussionAddress + 2, instrument.adsr2);
+                aram.write(percussionAddress + 3, instrument.gain);
+                aram.write(percussionAddress + 4, instrument.basePitchMult);
+                aram.write(percussionAddress + 5, instrument.percussionNote);
+                syncSourceSpcRange(percussionAddress, 6);
+            }
+        }
+    }
+
     syncSourceSpcRange(address, entrySize);
     return true;
 }
@@ -2207,7 +2227,14 @@ bool AssetsPanel::saveInstrumentDraft() {
     instrument.gain = instrumentDraft_.gain;
     instrument.basePitchMult = instrumentDraft_.basePitchMult;
     instrument.fracPitchMult = instrumentDraft_.fracPitchMult;
+    instrument.percussionNote = 0;
     instrument.contentOrigin = nspc::NspcContentOrigin::UserProvided;
+
+    if (!instrumentEditorIsNew_) {
+        if (const auto existingIndex = findInstrumentIndexById(instrument.id); existingIndex.has_value()) {
+            instrument.percussionNote = instruments[*existingIndex].percussionNote;
+        }
+    }
 
     const auto& config = project.engineConfig();
     const uint8_t entrySize = std::clamp<uint8_t>(config.instrumentEntryBytes, 5, 6);

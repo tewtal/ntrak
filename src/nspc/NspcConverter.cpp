@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <set>
 
 namespace ntrak::nspc {
@@ -89,6 +90,145 @@ int findMatchingSampleId(const NspcProject& target, const std::vector<uint8_t>& 
     return -1;
 }
 
+void collectUsedInstrumentIdsFromEventStream(const std::vector<NspcEventEntry>& events, std::set<int>& ids) {
+    int percussionBaseId = 0;
+
+    for (const auto& entry : events) {
+        if (const auto* vcmd = std::get_if<Vcmd>(&entry.event)) {
+            std::visit(overloaded{
+                           [&](const VcmdInst& v) { ids.insert(v.instrumentIndex & 0x7F); },
+                           [&](const VcmdPercussionBaseInstrument& v) { percussionBaseId = v.index & 0x7F; },
+                           [](const auto&) {},
+                       },
+                       vcmd->vcmd);
+            continue;
+        }
+
+        if (const auto* percussion = std::get_if<Percussion>(&entry.event)) {
+            ids.insert((percussionBaseId + percussion->index) & 0x7F);
+        }
+    }
+}
+
+std::optional<int> resolveSmwPercussionInstrumentId(const NspcProject& source, uint8_t percussionIndex) {
+    const auto& cfg = source.engineConfig();
+    if (cfg.engineVersion != "0.0" || cfg.percussionHeaders == 0) {
+        return std::nullopt;
+    }
+
+    const auto commandMap = cfg.commandMap.value_or(NspcCommandMap{});
+    const int percussionCount =
+        static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
+    if (percussionIndex >= static_cast<uint8_t>(std::max(0, percussionCount))) {
+        return std::nullopt;
+    }
+
+    const uint32_t addr = static_cast<uint32_t>(cfg.percussionHeaders) + static_cast<uint32_t>(percussionIndex) * 6u;
+    if (addr + 6u > kAramSize) {
+        return std::nullopt;
+    }
+
+    const auto aram = source.aram();
+    const uint8_t sampleIndex = aram.read(static_cast<uint16_t>(addr + 0u));
+    const uint8_t adsr1 = aram.read(static_cast<uint16_t>(addr + 1u));
+    const uint8_t adsr2 = aram.read(static_cast<uint16_t>(addr + 2u));
+    const uint8_t gain = aram.read(static_cast<uint16_t>(addr + 3u));
+    const uint8_t basePitch = aram.read(static_cast<uint16_t>(addr + 4u));
+    const uint8_t note = aram.read(static_cast<uint16_t>(addr + 5u));
+
+    for (const auto& inst : source.instruments()) {
+        if (inst.sampleIndex == sampleIndex && inst.adsr1 == adsr1 && inst.adsr2 == adsr2 && inst.gain == gain &&
+            inst.basePitchMult == basePitch && inst.percussionNote == note) {
+            return inst.id;
+        }
+    }
+
+    for (const auto& inst : source.instruments()) {
+        if (inst.sampleIndex == sampleIndex && inst.adsr1 == adsr1 && inst.adsr2 == adsr2 && inst.gain == gain &&
+            inst.basePitchMult == basePitch) {
+            return inst.id;
+        }
+    }
+
+    return std::nullopt;
+}
+
+uint8_t convertPercussionNoteToPitch(uint8_t rawNote, const NspcCommandMap& sourceCommandMap) {
+    if (rawNote >= sourceCommandMap.noteStart && rawNote <= sourceCommandMap.noteEnd) {
+        return static_cast<uint8_t>(rawNote - sourceCommandMap.noteStart);
+    }
+    return rawNote;
+}
+
+void convertSmwPercussionToNotes(NspcSong& song, const NspcProject& source) {
+    const bool isSmwProto = source.engineConfig().engineVersion == "0.0";
+    if (!isSmwProto) {
+        return;
+    }
+
+    const auto sourceCommandMap = source.engineConfig().commandMap.value_or(NspcCommandMap{});
+    NspcEventId nextEventId = song.peekNextEventId();
+
+    auto convertStream = [&](std::vector<NspcEventEntry>& events) {
+        std::vector<NspcEventEntry> converted;
+        converted.reserve(events.size());
+
+        int percussionBaseId = 0;
+        std::optional<int> currentInstrumentId = std::nullopt;
+
+        for (const auto& entry : events) {
+            if (const auto* vcmd = std::get_if<Vcmd>(&entry.event)) {
+                if (const auto* inst = std::get_if<VcmdInst>(&vcmd->vcmd)) {
+                    currentInstrumentId = inst->instrumentIndex & 0x7F;
+                } else if (const auto* base = std::get_if<VcmdPercussionBaseInstrument>(&vcmd->vcmd)) {
+                    percussionBaseId = base->index & 0x7F;
+                }
+                converted.push_back(entry);
+                continue;
+            }
+
+            const auto* percussion = std::get_if<Percussion>(&entry.event);
+            if (percussion == nullptr) {
+                converted.push_back(entry);
+                continue;
+            }
+
+            const int sourceInstrumentId =
+                resolveSmwPercussionInstrumentId(source, percussion->index).value_or((percussionBaseId + percussion->index) & 0x7F);
+            const NspcInstrument* sourceInst = findInstrumentById(source, sourceInstrumentId);
+            if (sourceInst == nullptr) {
+                converted.push_back(entry);
+                continue;
+            }
+
+            if (!currentInstrumentId.has_value() || *currentInstrumentId != sourceInstrumentId) {
+                NspcEventEntry instrumentSelect{};
+                instrumentSelect.id = nextEventId++;
+                instrumentSelect.event = NspcEvent{Vcmd{VcmdInst{static_cast<uint8_t>(sourceInstrumentId)}}};
+                instrumentSelect.originalAddr = entry.originalAddr;
+                converted.push_back(std::move(instrumentSelect));
+                currentInstrumentId = sourceInstrumentId;
+            }
+
+            NspcEventEntry noteEvent = entry;
+            noteEvent.event =
+                NspcEvent{Note{convertPercussionNoteToPitch(sourceInst->percussionNote, sourceCommandMap)}};
+            converted.push_back(std::move(noteEvent));
+        }
+
+        events = std::move(converted);
+    };
+
+    for (auto& track : song.tracks()) {
+        convertStream(track.events);
+    }
+    for (auto& subroutine : song.subroutines()) {
+        convertStream(subroutine.events);
+    }
+
+    song.setNextEventId(nextEventId);
+}
+
 }  // namespace
 
 std::vector<int> findUsedInstrumentIds(const NspcProject& project, int songIndex) {
@@ -97,16 +237,41 @@ std::vector<int> findUsedInstrumentIds(const NspcProject& project, int songIndex
     }
 
     std::set<int> ids;
-    walkAllEventsConst(project.songs()[songIndex], [&](const NspcEventEntry& entry) {
-        if (const auto* vcmd = std::get_if<Vcmd>(&entry.event)) {
-            std::visit(overloaded{
-                           [&](const VcmdInst& v) { ids.insert(v.instrumentIndex & 0x7F); },
-                           [&](const VcmdPercussionBaseInstrument& v) { ids.insert(v.index & 0x7F); },
-                           [](const auto&) {},
-                       },
-                       vcmd->vcmd);
+    const auto& song = project.songs()[songIndex];
+    const bool isSmwProto = project.engineConfig().engineVersion == "0.0";
+    if (!isSmwProto) {
+        for (const auto& track : song.tracks()) {
+            collectUsedInstrumentIdsFromEventStream(track.events, ids);
         }
-    });
+        for (const auto& subroutine : song.subroutines()) {
+            collectUsedInstrumentIdsFromEventStream(subroutine.events, ids);
+        }
+        return {ids.begin(), ids.end()};
+    }
+
+    auto collectSmwStream = [&](const std::vector<NspcEventEntry>& events) {
+        for (const auto& entry : events) {
+            if (const auto* vcmd = std::get_if<Vcmd>(&entry.event)) {
+                if (const auto* inst = std::get_if<VcmdInst>(&vcmd->vcmd)) {
+                    ids.insert(inst->instrumentIndex & 0x7F);
+                }
+                continue;
+            }
+            if (const auto* perc = std::get_if<Percussion>(&entry.event)) {
+                if (const auto resolved = resolveSmwPercussionInstrumentId(project, perc->index); resolved.has_value()) {
+                    ids.insert(*resolved);
+                } else {
+                    ids.insert(perc->index & 0x7F);
+                }
+            }
+        }
+    };
+    for (const auto& track : song.tracks()) {
+        collectSmwStream(track.events);
+    }
+    for (const auto& subroutine : song.subroutines()) {
+        collectSmwStream(subroutine.events);
+    }
 
     return {ids.begin(), ids.end()};
 }
@@ -301,6 +466,24 @@ SongPortResult portSong(const NspcProject& source, NspcProject& target, const So
                 if (instEntrySize >= 6) {
                     aramView.write(newInst.originalAddr + 5, newInst.fracPitchMult);
                 }
+
+                if (tgtEngine.engineVersion == "0.0" && tgtEngine.percussionHeaders != 0 && newInst.id >= 0) {
+                    const auto commandMap = tgtEngine.commandMap.value_or(NspcCommandMap{});
+                    const int percussionCount = static_cast<int>(commandMap.percussionEnd) -
+                                                static_cast<int>(commandMap.percussionStart) + 1;
+                    if (newInst.id < percussionCount) {
+                        const uint32_t percussionAddr =
+                            static_cast<uint32_t>(tgtEngine.percussionHeaders) + static_cast<uint32_t>(newInst.id) * 6u;
+                        if (percussionAddr + 6u <= 0x10000u) {
+                            aramView.write(static_cast<uint16_t>(percussionAddr + 0u), newInst.sampleIndex);
+                            aramView.write(static_cast<uint16_t>(percussionAddr + 1u), newInst.adsr1);
+                            aramView.write(static_cast<uint16_t>(percussionAddr + 2u), newInst.adsr2);
+                            aramView.write(static_cast<uint16_t>(percussionAddr + 3u), newInst.gain);
+                            aramView.write(static_cast<uint16_t>(percussionAddr + 4u), newInst.basePitchMult);
+                            aramView.write(static_cast<uint16_t>(percussionAddr + 5u), newInst.percussionNote);
+                        }
+                    }
+                }
             }
         } else {
             newInst.originalAddr = 0;
@@ -309,6 +492,12 @@ SongPortResult portSong(const NspcProject& source, NspcProject& target, const So
         target.instruments().push_back(std::move(newInst));
 
         result.instrumentRemap[mapping.sourceInstrumentId] = newInstId;
+    }
+
+    // SMW proto engines store per-instrument percussion notes.
+    // Convert Percussion events to explicit instrument+Note pairs when targeting non-SMW engines.
+    if (source.engineConfig().engineVersion == "0.0" && target.engineConfig().engineVersion != "0.0") {
+        convertSmwPercussionToNotes(portedSong, source);
     }
 
     // Remap instrument references in the copied song

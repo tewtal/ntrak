@@ -14,9 +14,9 @@ L3F00:
     CMP A, #$FB
     BEQ $3F10
     CMP A, #$FD
-    BEQ $3F40
+    BEQ $3F60
     CMP A, #$FC
-    BEQ $3F62
+    BEQ $3F82
     JMP $0C4A
 
 .patch $0BC0, "VCMD Dispatcher"

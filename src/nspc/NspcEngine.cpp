@@ -574,6 +574,7 @@ void parseEngineProvidedDefaults(const json& item, NspcEngineConfig& config) {
 NspcEngineConfig parseEngineConfigEntry(const json& item) {
     NspcEngineConfig config;
     config.id = item.value("id", "");
+    config.engineVersion = item.value("engineVersion", "");
     config.name = item.value("name", "");
     config.entryPoint = item.contains("entryPoint") ? parseHexJson(item["entryPoint"]) : 0;
 
@@ -592,12 +593,19 @@ NspcEngineConfig parseEngineConfigEntry(const json& item) {
     if (item.contains("instrumentHeaderPtrHi")) {
         config.instrumentHeaderPtrHi = parseHexJson(item["instrumentHeaderPtrHi"]);
     }
+    if (item.contains("percussionHeaderPtrLo")) {
+        config.percussionHeaderPtrLo = parseHexJson(item["percussionHeaderPtrLo"]);
+    }
+    if (item.contains("percussionHeaderPtrHi")) {
+        config.percussionHeaderPtrHi = parseHexJson(item["percussionHeaderPtrHi"]);
+    }
     if (item.contains("songIndexPtr")) {
         config.songIndexPtr = parseHexJson(item["songIndexPtr"]);
     }
 
     config.sampleHeaders = item.contains("sampleHeaders") ? parseHexJson(item["sampleHeaders"]) : 0;
     config.instrumentHeaders = item.contains("instrumentHeaders") ? parseHexJson(item["instrumentHeaders"]) : 0;
+    config.percussionHeaders = item.contains("percussionHeaders") ? parseHexJson(item["percussionHeaders"]) : 0;
     config.songIndexPointers = item.contains("songIndexPointers") ? parseHexJson(item["songIndexPointers"]) : 0;
     if (item.contains("songTriggerPort")) {
         config.songTriggerPort = static_cast<uint8_t>(parseHexJson(item["songTriggerPort"]) & 0x03u);
@@ -728,6 +736,16 @@ NspcEngineConfig resolveEngineConfigPointers(const NspcEngineConfig& config, std
     if (instrumentLo.has_value() && instrumentHi.has_value()) {
         resolved.instrumentHeaders =
             static_cast<uint16_t>(*instrumentLo | (static_cast<uint16_t>(*instrumentHi) << 8));
+    }
+    const auto percussionLo = config.percussionHeaderPtrLo.has_value()
+                                  ? readAramByte(aram, *config.percussionHeaderPtrLo)
+                                  : std::nullopt;
+    const auto percussionHi = config.percussionHeaderPtrHi.has_value()
+                                  ? readAramByte(aram, *config.percussionHeaderPtrHi)
+                                  : std::nullopt;
+    if (percussionLo.has_value() && percussionHi.has_value()) {
+        resolved.percussionHeaders =
+            static_cast<uint16_t>(*percussionLo | (static_cast<uint16_t>(*percussionHi) << 8));
     }
 
     if (config.songIndexPtr.has_value()) {

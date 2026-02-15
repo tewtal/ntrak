@@ -272,6 +272,7 @@ std::expected<NtiFileData, std::string> loadNtiFile(const std::filesystem::path&
     result.instrument.gain = *gain;
     result.instrument.basePitchMult = *basePitchMult;
     result.instrument.fracPitchMult = *fracPitchMult;
+    result.instrument.percussionNote = parseU8(instrumentNode.value("percussionNote", 0)).value_or(0);
     result.instrument.originalAddr = 0;
     result.instrument.contentOrigin = NspcContentOrigin::UserProvided;
 
@@ -319,6 +320,7 @@ std::expected<void, std::string> saveNtiFile(const std::filesystem::path& path, 
              {"gain", instrument.gain},
              {"basePitchMult", instrument.basePitchMult},
              {"fracPitchMult", instrument.fracPitchMult},
+             {"percussionNote", instrument.percussionNote},
          }},
         {"sample",
          {

@@ -81,6 +81,7 @@ struct NspcEngineExtension {
 
 struct NspcEngineConfig {
     std::string id;
+    std::string engineVersion;
     std::string name;
     uint16_t entryPoint = 0;
     std::optional<uint16_t> sampleHeaderPtr = std::nullopt;
@@ -88,9 +89,12 @@ struct NspcEngineConfig {
     std::optional<uint16_t> echoBufferPtr = std::nullopt;
     std::optional<uint16_t> instrumentHeaderPtrLo = std::nullopt;
     std::optional<uint16_t> instrumentHeaderPtrHi = std::nullopt;
+    std::optional<uint16_t> percussionHeaderPtrLo = std::nullopt;
+    std::optional<uint16_t> percussionHeaderPtrHi = std::nullopt;
     std::optional<uint16_t> songIndexPtr = std::nullopt;
     uint16_t sampleHeaders = 0;
     uint16_t instrumentHeaders = 0;
+    uint16_t percussionHeaders = 0;
     uint16_t songIndexPointers = 0;
     uint8_t songTriggerPort = 0;
     uint8_t songTriggerOffset = 1;

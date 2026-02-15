@@ -1,7 +1,7 @@
 ; @game zelda_alttp
 ; @extension No Pattern KOFF
 
-.org $3F40
+.org $3F60
 
 ; VCMD FD Handler
 ; Reads param from data stream: 0=off (normal KOFF), nonzero=on (skip KOFF)
