@@ -54,7 +54,7 @@ LegatoClear:
     PUSH A
     MOV A, $47
     EOR A, #$FF
-    OR A, $1C
+    AND A, $1C
     MOV $1C, A
     POP A
     RET
