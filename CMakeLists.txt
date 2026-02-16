@@ -59,7 +59,19 @@ FetchContent_Declare(
   GIT_TAG v1.14.0
 )
 
-FetchContent_MakeAvailable(glfw imgui miniaudio nfd nlohmann_json googletest)
+set(BUILD_MIDILIBRARY_ONLY ON CACHE BOOL "" FORCE)
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
+FetchContent_Declare(
+  midifile
+  GIT_REPOSITORY https://github.com/craigsapp/midifile.git
+  GIT_TAG master
+)
+
+FetchContent_MakeAvailable(glfw imgui miniaudio nfd nlohmann_json googletest midifile)
+
+# midifile uses include_directories() instead of target_include_directories(PUBLIC),
+# so we need to explicitly expose its headers to consumers.
+target_include_directories(midifile PUBLIC ${midifile_SOURCE_DIR}/include)
 
 # --- Glad Setup (Manual Local Lib) ---
 add_library(glad STATIC "${CMAKE_CURRENT_SOURCE_DIR}/libs/glad/src/glad.c")

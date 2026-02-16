@@ -2,6 +2,7 @@
 
 #include "ntrak/app/AppState.hpp"
 #include "ntrak/nspc/ItImport.hpp"
+#include "ntrak/nspc/MidiImport.hpp"
 #include "ntrak/nspc/NspcProject.hpp"
 #include "ntrak/ui/Panel.hpp"
 #include "ntrak/ui/SongPortDialog.hpp"
@@ -75,6 +76,11 @@ private:
     bool rebuildItImportPreview();
     bool executeItImportFromWorkbench();
     void drawItImportWarningsModal();
+    void openMidiImportDialog();
+    void drawMidiImportDialog();
+    bool rebuildMidiImportPreview();
+    bool executeMidiImportFromWorkbench();
+    void drawMidiImportWarningsModal();
     void setFileStatus(std::string message, bool isError);
     void registerPanelVisibilitySettingsHandler();
     void parsePanelVisibilitySettingsLine(const char* line);
@@ -107,6 +113,15 @@ private:
     nspc::ItImportOptions itImportOptions_{};
     std::optional<nspc::ItImportPreview> itImportPreview_;
     std::string itImportDialogError_;
+
+    // MIDI Import Workbench state
+    bool pendingOpenMidiImportDialog_ = false;
+    std::optional<std::filesystem::path> midiImportPath_;
+    nspc::MidiImportOptions midiImportOptions_{};
+    std::optional<nspc::MidiImportPreview> midiImportPreview_;
+    std::string midiImportDialogError_;
+    std::vector<std::string> midiImportWarnings_;
+    bool showMidiImportWarnings_ = false;
 };
 
 }  // namespace ntrak::ui

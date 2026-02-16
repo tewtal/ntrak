@@ -19,6 +19,7 @@ add_library(ntrak_nspc
   NspcOptimize.cpp
   NspcSpcExport.cpp
   ItImport.cpp
+  MidiImport.cpp
 )
 
 target_include_directories(ntrak_nspc PUBLIC
@@ -27,4 +28,4 @@ target_include_directories(ntrak_nspc PUBLIC
 
 target_compile_features(ntrak_nspc PUBLIC cxx_std_23)
 
-target_link_libraries(ntrak_nspc PUBLIC nlohmann_json::nlohmann_json ntrak_emulation ntrak_common)
+target_link_libraries(ntrak_nspc PUBLIC nlohmann_json::nlohmann_json ntrak_emulation ntrak_common midifile)

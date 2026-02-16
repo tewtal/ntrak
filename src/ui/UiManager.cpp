@@ -2,6 +2,7 @@
 
 #include "ntrak/common/UserGuide.hpp"
 #include "ntrak/nspc/ItImport.hpp"
+#include "ntrak/nspc/MidiImport.hpp"
 #include "ntrak/nspc/NspcCompile.hpp"
 #include "ntrak/nspc/NspcParser.hpp"
 #include "ntrak/nspc/NspcProjectFile.hpp"
@@ -322,6 +323,8 @@ void UiManager::draw() {
     songPortDialog_.draw();
     drawItImportDialog();
     drawItImportWarningsModal();
+    drawMidiImportDialog();
+    drawMidiImportWarningsModal();
 }
 
 void UiManager::setFileStatus(std::string message, bool isError) {
@@ -1259,6 +1262,9 @@ void UiManager::drawTitleBar() {
             if (ImGui::MenuItem("Import IT...")) {
                 openItImportDialog();
             }
+            if (ImGui::MenuItem("Import MIDI...")) {
+                openMidiImportDialog();
+            }
             ImGui::EndDisabled();
 
             if (ImGui::MenuItem("Open Project...")) {
@@ -1448,6 +1454,520 @@ void UiManager::drawItImportWarningsModal() {
 
     ImGui::BeginChild("##it-import-warning-list", ImVec2(780, 320), true);
     for (const auto& warning : itImportWarnings_) {
+        ImGui::BulletText("%s", warning.c_str());
+    }
+    ImGui::EndChild();
+
+    ImGui::Spacing();
+    if (ImGui::Button("Close", ImVec2(120, 0))) {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+// ---------------------------------------------------------------------------
+// MIDI Import Workbench
+// ---------------------------------------------------------------------------
+
+void UiManager::openMidiImportDialog() {
+    if (!appState_.project.has_value()) {
+        setFileStatus("No project loaded", true);
+        return;
+    }
+    const int targetSongIndex = appState_.selectedSongIndex;
+    if (targetSongIndex < 0 || targetSongIndex >= static_cast<int>(appState_.project->songs().size())) {
+        setFileStatus("Select a valid song slot before importing MIDI", true);
+        return;
+    }
+    if (appState_.lockEngineContent &&
+        appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
+        setFileStatus("MIDI import blocked: selected song is engine-owned and locked. Use 'Mark User' first.", true);
+        return;
+    }
+
+    pendingOpenMidiImportDialog_ = true;
+    midiImportPath_.reset();
+    midiImportOptions_ = nspc::MidiImportOptions{};
+    midiImportPreview_.reset();
+    midiImportDialogError_.clear();
+}
+
+bool UiManager::rebuildMidiImportPreview() {
+    if (!appState_.project.has_value() || !midiImportPath_.has_value()) {
+        return false;
+    }
+    const int targetSongIndex = appState_.selectedSongIndex;
+    if (targetSongIndex < 0 || targetSongIndex >= static_cast<int>(appState_.project->songs().size())) {
+        midiImportDialogError_ = "Selected song slot is invalid";
+        midiImportPreview_.reset();
+        return false;
+    }
+    if (appState_.lockEngineContent &&
+        appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
+        midiImportDialogError_ =
+            "MIDI import blocked: selected song is engine-owned and locked. Use 'Mark User' first.";
+        midiImportPreview_.reset();
+        return false;
+    }
+
+    auto preview =
+        nspc::analyzeMidiFileForSongSlot(*appState_.project, *midiImportPath_, targetSongIndex, midiImportOptions_);
+    if (!preview.has_value()) {
+        midiImportDialogError_ = preview.error();
+        midiImportPreview_.reset();
+        return false;
+    }
+    midiImportDialogError_.clear();
+    midiImportPreview_ = std::move(*preview);
+    return true;
+}
+
+bool UiManager::executeMidiImportFromWorkbench() {
+    if (!appState_.project.has_value()) {
+        midiImportDialogError_ = "No project loaded";
+        return false;
+    }
+    if (!midiImportPath_.has_value()) {
+        midiImportDialogError_ = "Select a MIDI file first";
+        return false;
+    }
+
+    const int targetSongIndex = appState_.selectedSongIndex;
+    if (targetSongIndex < 0 || targetSongIndex >= static_cast<int>(appState_.project->songs().size())) {
+        midiImportDialogError_ = "Selected song slot is invalid";
+        return false;
+    }
+    if (appState_.lockEngineContent &&
+        appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
+        midiImportDialogError_ =
+            "MIDI import blocked: selected song is engine-owned and locked. Use 'Mark User' first.";
+        setFileStatus(midiImportDialogError_, true);
+        return false;
+    }
+
+    auto importResult = nspc::importMidiFileIntoSongSlot(*appState_.project, *midiImportPath_, targetSongIndex,
+                                                         midiImportOptions_);
+    if (!importResult.has_value()) {
+        midiImportDialogError_ = importResult.error();
+        setFileStatus(std::format("MIDI import failed: {}", importResult.error()), true);
+        return false;
+    }
+
+    auto [project, report] = std::move(*importResult);
+    appState_.project = std::move(project);
+    appState_.commandHistory.clear();
+    resetPlaybackTracking(appState_.playback);
+    selectFirstPlayableRow(appState_, targetSongIndex);
+
+    if (appState_.project.has_value()) {
+        appState_.project->syncAramToSpcData();
+    }
+    const auto& spcData = appState_.project->sourceSpcData();
+    if (appState_.spcPlayer && !spcData.empty()) {
+        appState_.spcPlayer->stop();
+        (void)appState_.spcPlayer->loadFromMemory(spcData.data(), static_cast<uint32_t>(spcData.size()));
+    }
+
+    midiImportWarnings_ = std::move(report.warnings);
+    showMidiImportWarnings_ = !midiImportWarnings_.empty();
+
+    setFileStatus(std::format("Imported MIDI '{}' into song slot {:02d} ({} patterns, {} tracks, {} instruments, {} "
+                              "samples, {} warnings)",
+                              midiImportPath_->filename().string(), report.targetSongIndex,
+                              report.importedPatternCount, report.importedTrackCount, report.importedInstrumentCount,
+                              report.importedSampleCount, midiImportWarnings_.size()),
+                  false);
+
+    midiImportDialogError_.clear();
+    return true;
+}
+
+void UiManager::drawMidiImportDialog() {
+    if (pendingOpenMidiImportDialog_) {
+        ImGui::OpenPopup("MIDI Import Workbench");
+        pendingOpenMidiImportDialog_ = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(1060, 820), ImGuiCond_Appearing);
+    if (!ImGui::BeginPopupModal("MIDI Import Workbench", nullptr, ImGuiWindowFlags_NoResize)) {
+        return;
+    }
+
+    if (!appState_.project.has_value()) {
+        ImGui::TextDisabled("No project loaded.");
+        if (ImGui::Button("Close")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+        return;
+    }
+
+    const int targetSongIndex = appState_.selectedSongIndex;
+    const bool validSongSelection =
+        targetSongIndex >= 0 && targetSongIndex < static_cast<int>(appState_.project->songs().size());
+    if (!validSongSelection) {
+        ImGui::TextDisabled("Select a valid song slot in the Project panel first.");
+        if (ImGui::Button("Close")) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+        return;
+    }
+    const bool targetSongLocked = appState_.lockEngineContent &&
+                                  appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided();
+    if (targetSongLocked) {
+        ImGui::TextColored(
+            ImVec4(0.95f, 0.6f, 0.3f, 1.0f),
+            "Selected song is engine-owned and locked. Use Project -> Mark User to allow MIDI import.");
+    }
+
+    // --- Source MIDI File ---
+    ImGui::SeparatorText("Source MIDI File");
+    if (ImGui::Button("Select MIDI File...")) {
+        NFD::UniquePath outPath;
+        nfdfilteritem_t filters[1] = {{"MIDI Files", "mid,midi"}};
+        const nfdresult_t result = NFD::OpenDialog(outPath, filters, 1);
+        if (result == NFD_OKAY) {
+            midiImportPath_ = std::filesystem::path(outPath.get());
+            // Auto-detect channels and build default mappings
+            auto mappings = nspc::buildDefaultMidiChannelMappings(*midiImportPath_);
+            if (mappings.has_value()) {
+                midiImportOptions_.channelMappings = std::move(*mappings);
+            } else {
+                midiImportDialogError_ = mappings.error();
+            }
+            (void)rebuildMidiImportPreview();
+        } else if (result == NFD_ERROR) {
+            midiImportDialogError_ =
+                std::format("File dialog error: {}", NFD::GetError() ? NFD::GetError() : "unknown");
+        }
+    }
+    ImGui::SameLine();
+    if (midiImportPath_.has_value()) {
+        ImGui::TextUnformatted(midiImportPath_->filename().string().c_str());
+    } else {
+        ImGui::TextDisabled("(none selected)");
+    }
+
+    if (midiImportPreview_.has_value()) {
+        const auto& preview = *midiImportPreview_;
+
+        // --- Song Overview ---
+        ImGui::SeparatorText("Song Overview");
+        ImGui::Text("File: %s", preview.fileName.c_str());
+        ImGui::SameLine();
+        ImGui::Text("Format: Type %d", preview.midiFormat);
+        ImGui::SameLine();
+        ImGui::Text("PPQ: %d", preview.ppq);
+        ImGui::Text("Target song slot: %02d", targetSongIndex);
+        ImGui::Text("Active MIDI channels: %d", preview.activeChannelCount);
+        ImGui::SameLine();
+        ImGui::Text("Selected for import: %d", preview.selectedChannelCount);
+        ImGui::Text("Estimated patterns: %d", preview.estimatedPatternCount);
+        ImGui::SameLine();
+        ImGui::Text("Tracks: %d", preview.estimatedTrackCount);
+
+        // --- Channel Mapping ---
+        ImGui::SeparatorText("Channel Mapping");
+        if (ImGui::BeginTable("##midi-channel-mapping", 8,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                              ImVec2(0, 260))) {
+            ImGui::TableSetupColumn("En", ImGuiTableColumnFlags_WidthFixed, 30);
+            ImGui::TableSetupColumn("MIDI Ch", ImGuiTableColumnFlags_WidthFixed, 130);
+            ImGui::TableSetupColumn("Notes", ImGuiTableColumnFlags_WidthFixed, 55);
+            ImGui::TableSetupColumn("Range", ImGuiTableColumnFlags_WidthFixed, 75);
+            ImGui::TableSetupColumn("SNES Ch", ImGuiTableColumnFlags_WidthFixed, 70);
+            ImGui::TableSetupColumn("Instrument", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Transpose", ImGuiTableColumnFlags_WidthFixed, 90);
+            ImGui::TableSetupColumn("##extra", ImGuiTableColumnFlags_WidthFixed, 1);
+            ImGui::TableHeadersRow();
+
+            for (size_t i = 0; i < midiImportOptions_.channelMappings.size(); ++i) {
+                auto& mapping = midiImportOptions_.channelMappings[i];
+                ImGui::TableNextRow();
+                ImGui::PushID(static_cast<int>(i));
+
+                // Find matching channel preview
+                const nspc::MidiChannelPreview* chPreview = nullptr;
+                for (const auto& cp : preview.channels) {
+                    if (cp.midiChannel == mapping.midiChannel) {
+                        chPreview = &cp;
+                        break;
+                    }
+                }
+
+                // Enable checkbox
+                ImGui::TableSetColumnIndex(0);
+                bool enabled = mapping.enabled;
+                if (ImGui::Checkbox("##en", &enabled)) {
+                    mapping.enabled = enabled;
+                    (void)rebuildMidiImportPreview();
+                }
+
+                // MIDI Channel label
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(mapping.channelLabel.c_str());
+
+                // Note count
+                ImGui::TableSetColumnIndex(2);
+                if (chPreview) {
+                    ImGui::Text("%d", chPreview->noteCount);
+                } else {
+                    ImGui::TextDisabled("0");
+                }
+
+                // Note range
+                ImGui::TableSetColumnIndex(3);
+                if (chPreview && chPreview->noteCount > 0) {
+                    // Format note range
+                    auto noteName = [](int note) -> std::string {
+                        const char* names[] = {"C",  "C#", "D",  "D#", "E",  "F",
+                                               "F#", "G",  "G#", "A",  "A#", "B"};
+                        int octave = (note / 12) - 1;
+                        return std::format("{}{}", names[note % 12], octave);
+                    };
+                    ImGui::Text("%s-%s", noteName(chPreview->minNote).c_str(),
+                                noteName(chPreview->maxNote).c_str());
+                } else {
+                    ImGui::TextDisabled("---");
+                }
+
+                // SNES Channel
+                ImGui::TableSetColumnIndex(4);
+                ImGui::SetNextItemWidth(55);
+                const char* nspcChLabels[] = {"0", "1", "2", "3", "4", "5", "6", "7", "Auto"};
+                int comboIndex = (mapping.targetNspcChannel >= 0 && mapping.targetNspcChannel < 8)
+                                     ? mapping.targetNspcChannel
+                                     : 8;
+                if (ImGui::Combo("##nspccch", &comboIndex, nspcChLabels, 9)) {
+                    mapping.targetNspcChannel = (comboIndex < 8) ? comboIndex : -1;
+                    (void)rebuildMidiImportPreview();
+                }
+
+                // Instrument source
+                ImGui::TableSetColumnIndex(5);
+                ImGui::SetNextItemWidth(-1);
+                const char* instrKindLabels[] = {"Map To Existing", "Blank", "Load BRR...", "Load NTI..."};
+                int kindIndex = static_cast<int>(mapping.instrumentSource.kind);
+                if (ImGui::Combo("##instkind", &kindIndex, instrKindLabels, 4)) {
+                    mapping.instrumentSource.kind = static_cast<nspc::MidiInstrumentSource::Kind>(kindIndex);
+                    mapping.instrumentSource.existingInstrumentId = -1;
+                    mapping.instrumentSource.assetPath.reset();
+                    (void)rebuildMidiImportPreview();
+                }
+
+                // Contextual sub-controls for instrument source
+                if (mapping.instrumentSource.kind == nspc::MidiInstrumentSource::Kind::MapToExisting) {
+                    ImGui::SameLine();
+                    ImGui::SetNextItemWidth(120);
+
+                    // Build combo items from existing instruments
+                    const auto& instruments = appState_.project->instruments();
+                    int selectedIdx = -1;
+                    std::vector<std::string> labels;
+                    labels.reserve(instruments.size());
+                    for (size_t j = 0; j < instruments.size(); ++j) {
+                        labels.push_back(instrumentLabel(instruments[j]));
+                        if (instruments[j].id == mapping.instrumentSource.existingInstrumentId) {
+                            selectedIdx = static_cast<int>(j);
+                        }
+                    }
+
+                    if (ImGui::BeginCombo("##existinst", selectedIdx >= 0 ? labels[static_cast<size_t>(selectedIdx)].c_str() : "(select)")) {
+                        for (size_t j = 0; j < instruments.size(); ++j) {
+                            const bool isSelected = (static_cast<int>(j) == selectedIdx);
+                            if (ImGui::Selectable(labels[j].c_str(), isSelected)) {
+                                mapping.instrumentSource.existingInstrumentId = instruments[j].id;
+                                (void)rebuildMidiImportPreview();
+                            }
+                            if (isSelected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
+                } else if (mapping.instrumentSource.kind == nspc::MidiInstrumentSource::Kind::FromBrrFile ||
+                           mapping.instrumentSource.kind == nspc::MidiInstrumentSource::Kind::FromNtiFile) {
+                    ImGui::SameLine();
+                    if (ImGui::SmallButton("...")) {
+                        NFD::UniquePath assetPath;
+                        const bool isBrr =
+                            (mapping.instrumentSource.kind == nspc::MidiInstrumentSource::Kind::FromBrrFile);
+                        nfdfilteritem_t assetFilter[1] = {
+                            isBrr ? nfdfilteritem_t{"BRR Sample", "brr"} : nfdfilteritem_t{"NTI Instrument", "nti"}};
+                        if (NFD::OpenDialog(assetPath, assetFilter, 1) == NFD_OKAY) {
+                            mapping.instrumentSource.assetPath = std::filesystem::path(assetPath.get());
+                            (void)rebuildMidiImportPreview();
+                        }
+                    }
+                    ImGui::SameLine();
+                    if (mapping.instrumentSource.assetPath.has_value()) {
+                        ImGui::TextUnformatted(mapping.instrumentSource.assetPath->filename().string().c_str());
+                    } else {
+                        ImGui::TextDisabled("(none)");
+                    }
+                }
+
+                // Transpose
+                ImGui::TableSetColumnIndex(6);
+                ImGui::SetNextItemWidth(75);
+                int transpose = mapping.transposeOctaves;
+                if (ImGui::DragInt("##transpose", &transpose, 0.1f, -3, 3, "%d oct")) {
+                    mapping.transposeOctaves = static_cast<int8_t>(std::clamp(transpose, -3, 3));
+                    (void)rebuildMidiImportPreview();
+                }
+
+                ImGui::PopID();
+            }
+
+            ImGui::EndTable();
+        }
+
+        // --- Options ---
+        ImGui::SeparatorText("Options");
+        bool convertVelocity = midiImportOptions_.convertVelocityToVolume;
+        if (ImGui::Checkbox("Convert velocity to volume", &convertVelocity)) {
+            midiImportOptions_.convertVelocityToVolume = convertVelocity;
+        }
+        ImGui::SameLine();
+        bool convertPan = midiImportOptions_.convertPanCc;
+        if (ImGui::Checkbox("Convert pan CC#10", &convertPan)) {
+            midiImportOptions_.convertPanCc = convertPan;
+        }
+
+        // --- Delete Target Instruments ---
+        auto toggleId = [](std::vector<int>& ids, int id, bool checked) {
+            const auto it = std::find(ids.begin(), ids.end(), id);
+            if (checked) {
+                if (it == ids.end()) {
+                    ids.push_back(id);
+                }
+            } else if (it != ids.end()) {
+                ids.erase(it);
+            }
+        };
+        auto hasId = [](const std::vector<int>& ids, int id) {
+            return std::find(ids.begin(), ids.end(), id) != ids.end();
+        };
+
+        ImGui::SeparatorText("Delete Target Instruments");
+        if (ImGui::BeginTable("##midi-import-delete-inst", 3,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                              ImVec2(0, 100))) {
+            ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 35);
+            ImGui::TableSetupColumn("Instrument", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+            for (const auto& instrument : appState_.project->instruments()) {
+                ImGui::TableNextRow();
+                ImGui::PushID(300000 + instrument.id);
+                ImGui::TableSetColumnIndex(0);
+                bool checked = hasId(midiImportOptions_.instrumentsToDelete, instrument.id);
+                if (ImGui::Checkbox("##delinst", &checked)) {
+                    toggleId(midiImportOptions_.instrumentsToDelete, instrument.id, checked);
+                    (void)rebuildMidiImportPreview();
+                }
+
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(instrumentLabel(instrument).c_str());
+                ImGui::TableSetColumnIndex(2);
+                const auto sampleIt = std::find_if(
+                    appState_.project->samples().begin(), appState_.project->samples().end(),
+                    [&](const nspc::BrrSample& value) { return value.id == (instrument.sampleIndex & 0x7F); });
+                if (sampleIt != appState_.project->samples().end()) {
+                    ImGui::TextUnformatted(sampleLabel(*sampleIt).c_str());
+                } else {
+                    ImGui::TextDisabled("(none)");
+                }
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+
+        ImGui::SeparatorText("Delete Target Samples");
+        if (ImGui::BeginTable("##midi-import-delete-sample", 2,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                              ImVec2(0, 100))) {
+            ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 35);
+            ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableHeadersRow();
+            for (const auto& sample : appState_.project->samples()) {
+                ImGui::TableNextRow();
+                ImGui::PushID(400000 + sample.id);
+                ImGui::TableSetColumnIndex(0);
+                bool checked = hasId(midiImportOptions_.samplesToDelete, sample.id);
+                if (ImGui::Checkbox("##delsample", &checked)) {
+                    toggleId(midiImportOptions_.samplesToDelete, sample.id, checked);
+                    (void)rebuildMidiImportPreview();
+                }
+                ImGui::TableSetColumnIndex(1);
+                ImGui::TextUnformatted(sampleLabel(sample).c_str());
+                ImGui::PopID();
+            }
+            ImGui::EndTable();
+        }
+
+        // --- ARAM Usage ---
+        ImGui::SeparatorText("ARAM Usage");
+        ImGui::Text("Free ARAM: %u", preview.currentFreeAramBytes);
+        ImGui::SameLine();
+        ImGui::Text("After deletion: %u", preview.freeAramAfterDeletionBytes);
+        ImGui::Text("New sample bytes: %u", preview.estimatedRequiredSampleBytes);
+        if (preview.estimatedRequiredSampleBytes > preview.freeAramAfterDeletionBytes) {
+            ImGui::TextColored(ImVec4(0.95f, 0.4f, 0.4f, 1.0f),
+                               "Sample data estimate exceeds free ARAM; reduce size or delete more assets.");
+        } else {
+            ImGui::TextColored(ImVec4(0.4f, 0.95f, 0.4f, 1.0f), "Sample size estimate fits current free ARAM.");
+        }
+
+        // --- Warnings Preview ---
+        ImGui::SeparatorText("Import Warnings Preview");
+        ImGui::BeginChild("##midi-import-preview-warnings", ImVec2(0, 80), true);
+        if (preview.warnings.empty()) {
+            ImGui::TextDisabled("No warnings from current preview.");
+        } else {
+            for (const auto& warning : preview.warnings) {
+                ImGui::BulletText("%s", warning.c_str());
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    if (!midiImportDialogError_.empty()) {
+        ImGui::TextColored(ImVec4(0.95f, 0.4f, 0.4f, 1.0f), "%s", midiImportDialogError_.c_str());
+    }
+
+    ImGui::Spacing();
+    const bool canImport = midiImportPath_.has_value() && midiImportPreview_.has_value() && !targetSongLocked;
+    ImGui::BeginDisabled(!canImport);
+    if (ImGui::Button("Import MIDI", ImVec2(120, 0))) {
+        if (executeMidiImportFromWorkbench()) {
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void UiManager::drawMidiImportWarningsModal() {
+    if (showMidiImportWarnings_) {
+        ImGui::OpenPopup("MIDI Import Warnings");
+        showMidiImportWarnings_ = false;
+    }
+
+    if (!ImGui::BeginPopupModal("MIDI Import Warnings", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+
+    ImGui::TextWrapped("Import completed with %zu warning(s).", midiImportWarnings_.size());
+    ImGui::Spacing();
+
+    ImGui::BeginChild("##midi-import-warning-list", ImVec2(780, 320), true);
+    for (const auto& warning : midiImportWarnings_) {
         ImGui::BulletText("%s", warning.c_str());
     }
     ImGui::EndChild();
