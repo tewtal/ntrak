@@ -36,6 +36,9 @@ std::expected<NspcProject, NspcParseError> NspcParser::load(std::span<const std:
     std::array<std::uint8_t, 0x10000> aram{};
     std::copy_n(data.begin() + 0x100, aram.size(), aram.begin());
 
+    // Copy the source SPC data to a local variable so we can modify it before sending it to the project.
+    std::vector<std::uint8_t> spcData(data.begin(), data.end());
+
     std::optional<NspcEngineConfig> matchingConfig;
 
     // Compare the ARAM data against engine configuration to find a matching engine.
@@ -59,6 +62,37 @@ std::expected<NspcProject, NspcParseError> NspcParser::load(std::span<const std:
         return std::unexpected(NspcParseError::UnsupportedVersion);
     }
 
-    return NspcProject(std::move(*matchingConfig), std::move(aram));
+    // Addmusick tweak: override SCR/ESA from SPC header DSP registers if they differ.
+    constexpr size_t kSpcDspRegOffset = 0x10100;
+    constexpr uint8_t kDirReg = 0x5D;
+    constexpr uint8_t kEsaReg = 0x6D;
+
+    if (matchingConfig->engineVariant == "addmusick" && data.size() >= kSpcDspRegOffset + 128) {
+        const uint8_t dspDir = data[kSpcDspRegOffset + kDirReg];
+        const uint8_t dspEsa = data[kSpcDspRegOffset + kEsaReg];
+        const uint16_t spcSampleHeaders = static_cast<uint16_t>(dspDir) << 8U;
+        const uint16_t spcEchoBuffer = static_cast<uint16_t>(dspEsa) << 8U;
+
+        if (spcSampleHeaders != 0 && spcSampleHeaders != matchingConfig->sampleHeaders) {
+            matchingConfig->sampleHeaders = spcSampleHeaders;
+        }
+        if (spcEchoBuffer != matchingConfig->echoBuffer) {
+            matchingConfig->echoBuffer = spcEchoBuffer;
+        }
+
+        if (matchingConfig->defaultDspTablePtr.has_value()) {
+            uint16_t defaultDspTable = aram[matchingConfig->defaultDspTablePtr.value()];
+            defaultDspTable |= aram[matchingConfig->defaultDspTablePtr.value() + 1] << 8U;
+
+            aram[defaultDspTable + 10] = dspDir;
+            aram[defaultDspTable + 11] = dspEsa;
+            spcData[defaultDspTable + 0x100 + 10] = dspDir;
+            spcData[defaultDspTable + 0x100 + 11] = dspEsa;
+        }
+    }
+
+    NspcProject project(std::move(*matchingConfig), aram);
+    project.setSourceSpcData(std::vector<std::uint8_t>(spcData.begin(), spcData.end()));
+    return project;
 }
 }  // namespace ntrak::nspc

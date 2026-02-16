@@ -1,12 +1,10 @@
 #include "ntrak/ui/AssetsPanel.hpp"
 
 #include "ntrak/audio/SpcPlayer.hpp"
-#include "ntrak/nspc/NspcAssetFile.hpp"
 #include "ntrak/nspc/BrrCodec.hpp"
+#include "ntrak/nspc/NspcAssetFile.hpp"
 
 #include <imgui.h>
-#include <miniaudio.h>
-#include <nfd.hpp>
 
 #include <algorithm>
 #include <array>
@@ -16,11 +14,13 @@
 #include <cstdio>
 #include <filesystem>
 #include <format>
+#include <miniaudio.h>
+#include <nfd.hpp>
+#include <ntrak/app/App.hpp>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <ntrak/app/App.hpp>
 
 namespace ntrak::ui {
 
@@ -141,7 +141,8 @@ std::optional<uint16_t> allocateFromFreeRanges(std::vector<AddressRange>& freeRa
 
 std::optional<int> firstUnusedId(const auto& objects, int maxExclusive) {
     for (int id = 0; id < maxExclusive; ++id) {
-        const bool used = std::any_of(objects.begin(), objects.end(), [id](const auto& value) { return value.id == id; });
+        const bool used = std::any_of(objects.begin(), objects.end(),
+                                      [id](const auto& value) { return value.id == id; });
         if (!used) {
             return id;
         }
@@ -154,12 +155,11 @@ void sortById(auto& values) {
 }
 
 std::expected<std::vector<int16_t>, std::string> decodeWavToMonoPcm16(const std::string& path,
-                                                                       uint32_t targetSampleRate,
-                                                                       bool highQualityResampling) {
+                                                                      uint32_t targetSampleRate,
+                                                                      bool highQualityResampling) {
     constexpr ma_uint32 kDefaultResamplerLpfOrder = 4;
     ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_s16, 1, targetSampleRate);
-    decoderConfig.resampling.linear.lpfOrder = highQualityResampling ? MA_MAX_FILTER_ORDER
-                                                                      : kDefaultResamplerLpfOrder;
+    decoderConfig.resampling.linear.lpfOrder = highQualityResampling ? MA_MAX_FILTER_ORDER : kDefaultResamplerLpfOrder;
     ma_decoder decoder{};
 
     const ma_result initResult = ma_decoder_init_file(path.c_str(), &decoderConfig, &decoder);
@@ -173,8 +173,8 @@ std::expected<std::vector<int16_t>, std::string> decodeWavToMonoPcm16(const std:
     std::array<int16_t, 4096> chunk{};
     while (true) {
         ma_uint64 framesRead = 0;
-        const ma_result readResult =
-            ma_decoder_read_pcm_frames(&decoder, chunk.data(), static_cast<ma_uint64>(chunk.size()), &framesRead);
+        const ma_result readResult = ma_decoder_read_pcm_frames(&decoder, chunk.data(),
+                                                                static_cast<ma_uint64>(chunk.size()), &framesRead);
         if (readResult != MA_SUCCESS && readResult != MA_AT_END) {
             ma_decoder_uninit(&decoder);
             return std::unexpected(std::format("Error while decoding WAV data: {}", path));
@@ -209,18 +209,7 @@ void AssetsPanel::syncSourceSpcRange(uint16_t aramAddress, size_t size) {
     if (!appState_.project.has_value() || size == 0) {
         return;
     }
-    if (static_cast<uint32_t>(aramAddress) + static_cast<uint32_t>(size) > kAramSize) {
-        return;
-    }
-    if (appState_.sourceSpcData.size() < kSpcHeaderSize + kAramSize) {
-        return;
-    }
-
-    auto aram = appState_.project->aram();
-    const auto src = aram.bytes(aramAddress, size);
-    auto dstIt = appState_.sourceSpcData.begin() +
-                 static_cast<std::ptrdiff_t>(kSpcHeaderSize + static_cast<size_t>(aramAddress));
-    std::copy(src.begin(), src.end(), dstIt);
+    appState_.project->syncAramRangeToSpcData(aramAddress, size);
 }
 
 void AssetsPanel::syncProjectAramToPreviewPlayer() {
@@ -267,8 +256,8 @@ void AssetsPanel::previewInstrument(const InstrumentDraft& draft) {
 
     audio::NotePreviewParams params{};
     params.sampleIndex = static_cast<uint8_t>(draft.sampleIndex & 0x7F);
-    params.pitch =
-        audio::NotePreviewParams::pitchFromNspcNote(kDefaultPreviewMidiNote, pitchMultiplierFromInstrument(draftInstrument));
+    params.pitch = audio::NotePreviewParams::pitchFromNspcNote(kDefaultPreviewMidiNote,
+                                                               pitchMultiplierFromInstrument(draftInstrument));
     params.volumeL = 127;
     params.volumeR = 127;
     params.adsr1 = draft.adsr1;
@@ -294,8 +283,8 @@ void AssetsPanel::previewSample(const SampleDraft& draft) {
         return;
     }
     if (draft.brrData.size() > kAramSize) {
-        setStatus(std::format("Preview unavailable: sample is too large ({} bytes, max {} bytes)",
-                             draft.brrData.size(), kAramSize));
+        setStatus(std::format("Preview unavailable: sample is too large ({} bytes, max {} bytes)", draft.brrData.size(),
+                              kAramSize));
         return;
     }
 
@@ -312,7 +301,8 @@ void AssetsPanel::previewSample(const SampleDraft& draft) {
     auto playerAram = appState_.spcPlayer->spcDsp().aram();
 
     uint16_t previewAddr = draft.originalAddr;
-    if (previewAddr == 0 || static_cast<uint32_t>(previewAddr) + static_cast<uint32_t>(draft.brrData.size()) > kAramSize) {
+    if (previewAddr == 0 ||
+        static_cast<uint32_t>(previewAddr) + static_cast<uint32_t>(draft.brrData.size()) > kAramSize) {
         // Sample doesn't have a valid address or doesn't fit - use tail of ARAM
         // We already validated that brrData.size() <= kAramSize above
         const uint32_t tailStart = static_cast<uint32_t>(kAramSize) - static_cast<uint32_t>(draft.brrData.size());
@@ -331,8 +321,8 @@ void AssetsPanel::previewSample(const SampleDraft& draft) {
     const uint16_t dirAddr = static_cast<uint16_t>(dirAddr32);
     const int blockCount = static_cast<int>(draft.brrData.size() / 9u);
     const int loopBlock = std::clamp(draft.loopBlock, 0, std::max(blockCount - 1, 0));
-    const uint16_t loopAddr = draft.loopEnabled ? static_cast<uint16_t>(previewAddr + static_cast<uint16_t>(loopBlock * 9))
-                                                : previewAddr;
+    const uint16_t loopAddr =
+        draft.loopEnabled ? static_cast<uint16_t>(previewAddr + static_cast<uint16_t>(loopBlock * 9)) : previewAddr;
 
     playerAram.write16(dirAddr, previewAddr);
     playerAram.write16(dirAddr + 2u, loopAddr);
@@ -341,8 +331,8 @@ void AssetsPanel::previewSample(const SampleDraft& draft) {
     params.sampleIndex = static_cast<uint8_t>(draft.id);
     uint16_t samplePitchBase = 0x1000;
     if (!draft.wavSourcePcm.empty() && draft.targetSampleRate > 0) {
-        const uint32_t scaled =
-            (0x1000u * std::clamp<uint32_t>(draft.targetSampleRate, 1000u, 32000u) + 16000u) / 32000u;
+        const uint32_t scaled = (0x1000u * std::clamp<uint32_t>(draft.targetSampleRate, 1000u, 32000u) + 16000u) /
+                                32000u;
         samplePitchBase = static_cast<uint16_t>(std::clamp<uint32_t>(scaled, 1u, 0x3FFFu));
     }
     params.pitch = audio::NotePreviewParams::pitchFromMidi(kDefaultPreviewMidiNote, samplePitchBase);
@@ -391,9 +381,9 @@ void AssetsPanel::startInstrumentKeyboardPreview(int midiPitch, int key) {
     }
 
     auto& instruments = appState_.project->instruments();
-    const auto it =
-        std::find_if(instruments.begin(), instruments.end(),
-                     [&](const nspc::NspcInstrument& instrument) { return instrument.id == selectedInstrumentId_; });
+    const auto it = std::find_if(instruments.begin(), instruments.end(), [&](const nspc::NspcInstrument& instrument) {
+        return instrument.id == selectedInstrumentId_;
+    });
     if (it == instruments.end()) {
         return;
     }
@@ -462,8 +452,8 @@ std::optional<size_t> AssetsPanel::findInstrumentIndexById(int id) const {
         return std::nullopt;
     }
     const auto& instruments = appState_.project->instruments();
-    const auto it =
-        std::find_if(instruments.begin(), instruments.end(), [id](const auto& instrument) { return instrument.id == id; });
+    const auto it = std::find_if(instruments.begin(), instruments.end(),
+                                 [id](const auto& instrument) { return instrument.id == id; });
     if (it == instruments.end()) {
         return std::nullopt;
     }
@@ -500,7 +490,8 @@ bool AssetsPanel::writeInstrumentToAram(const nspc::NspcInstrument& instrument) 
         return false;
     }
 
-    const uint32_t address32 = static_cast<uint32_t>(config.instrumentHeaders) + static_cast<uint32_t>(instrument.id) * entrySize;
+    const uint32_t address32 = static_cast<uint32_t>(config.instrumentHeaders) +
+                               static_cast<uint32_t>(instrument.id) * entrySize;
     if (address32 + entrySize > kAramSize) {
         setStatus("Instrument table write would exceed ARAM");
         return false;
@@ -519,11 +510,11 @@ bool AssetsPanel::writeInstrumentToAram(const nspc::NspcInstrument& instrument) 
 
     if (config.engineVersion == "0.0" && config.percussionHeaders != 0) {
         const auto commandMap = config.commandMap.value_or(nspc::NspcCommandMap{});
-        const int percussionCount =
-            static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
+        const int percussionCount = static_cast<int>(commandMap.percussionEnd) -
+                                    static_cast<int>(commandMap.percussionStart) + 1;
         if (instrument.id >= 0 && instrument.id < percussionCount) {
-            const uint32_t percussionAddress32 =
-                static_cast<uint32_t>(config.percussionHeaders) + static_cast<uint32_t>(instrument.id) * 6u;
+            const uint32_t percussionAddress32 = static_cast<uint32_t>(config.percussionHeaders) +
+                                                 static_cast<uint32_t>(instrument.id) * 6u;
             if (percussionAddress32 + 6u <= kAramSize) {
                 const uint16_t percussionAddress = static_cast<uint16_t>(percussionAddress32);
                 aram.write(percussionAddress + 0, instrument.sampleIndex);
@@ -554,7 +545,8 @@ void AssetsPanel::clearInstrumentEntryInAram(int instrumentId) {
         return;
     }
 
-    const uint32_t address32 = static_cast<uint32_t>(config.instrumentHeaders) + static_cast<uint32_t>(instrumentId) * entrySize;
+    const uint32_t address32 = static_cast<uint32_t>(config.instrumentHeaders) +
+                               static_cast<uint32_t>(instrumentId) * entrySize;
     if (address32 + entrySize > kAramSize) {
         return;
     }
@@ -721,8 +713,8 @@ bool AssetsPanel::importNtiAsNewInstrument() {
     sample.originalAddr = *allocatedAddr;
     sample.originalLoopAddr = sample.originalAddr;
     if (imported->loopEnabled) {
-        const uint32_t loopAddr =
-            static_cast<uint32_t>(sample.originalAddr) + static_cast<uint32_t>(imported->loopOffsetBytes);
+        const uint32_t loopAddr = static_cast<uint32_t>(sample.originalAddr) +
+                                  static_cast<uint32_t>(imported->loopOffsetBytes);
         if (loopAddr >= kAramSize) {
             setStatus("Imported NTI loop offset exceeds ARAM range");
             return false;
@@ -793,7 +785,7 @@ bool AssetsPanel::exportSelectedInstrumentAsNti() {
     const auto& sample = project.samples()[*sampleIndex];
 
     std::string defaultName = instrument.name.empty() ? std::format("instrument_{:02X}.nti", instrument.id)
-                                                       : std::format("{}.nti", instrument.name);
+                                                      : std::format("{}.nti", instrument.name);
 
     NFD::UniquePath outPath;
     nfdfilteritem_t filterItem[1] = {{"ntrak Instrument", "nti"}};
@@ -838,11 +830,12 @@ bool AssetsPanel::importWavIntoSampleDraft(SampleDraft& draft) {
 
     draft.name = std::filesystem::path(wavPath).filename().string();
     const int blockCount = static_cast<int>(draft.brrData.size() / 9u);
-    const float durationSeconds =
-        static_cast<float>(draft.wavSourcePcm.size()) / static_cast<float>(std::max<uint32_t>(draft.targetSampleRate, 1u));
-    setStatus(std::format("Imported WAV {} ({} bytes BRR, {} blocks, {:.2f}s @ {}Hz). Use Start/Loop/End tools to trim.",
-                         std::filesystem::path(wavPath).filename().string(),
-                         draft.brrData.size(), blockCount, durationSeconds, draft.targetSampleRate));
+    const float durationSeconds = static_cast<float>(draft.wavSourcePcm.size()) /
+                                  static_cast<float>(std::max<uint32_t>(draft.targetSampleRate, 1u));
+    setStatus(
+        std::format("Imported WAV {} ({} bytes BRR, {} blocks, {:.2f}s @ {}Hz). Use Start/Loop/End tools to trim.",
+                    std::filesystem::path(wavPath).filename().string(), draft.brrData.size(), blockCount,
+                    durationSeconds, draft.targetSampleRate));
     return true;
 }
 
@@ -876,8 +869,8 @@ bool AssetsPanel::importBrrIntoSampleDraft(SampleDraft& draft) {
     draft.loopBlock = 0;
 
     refreshSampleWavePreview();
-    setStatus(std::format("Imported BRR {} ({} bytes, {} blocks)", brrPath.filename().string(),
-                         draft.brrData.size(), blockCount));
+    setStatus(std::format("Imported BRR {} ({} bytes, {} blocks)", brrPath.filename().string(), draft.brrData.size(),
+                          blockCount));
     return true;
 }
 
@@ -907,7 +900,8 @@ bool AssetsPanel::rebuildWavSampleDraftBrr(SampleDraft& draft) {
     encodeOptions.enableLoop = draft.loopEnabled;
     encodeOptions.enhanceTreble = draft.enhanceTrebleOnEncode;
     if (draft.loopEnabled) {
-        const int relativeLoop = std::clamp(draft.wavLoopSample - draft.wavTrimStartSample, 0, static_cast<int>(trimmed.size()) - 1);
+        const int relativeLoop = std::clamp(draft.wavLoopSample - draft.wavTrimStartSample, 0,
+                                            static_cast<int>(trimmed.size()) - 1);
         encodeOptions.loopStartSample = static_cast<size_t>(relativeLoop);
     }
 
@@ -918,9 +912,10 @@ bool AssetsPanel::rebuildWavSampleDraftBrr(SampleDraft& draft) {
     }
 
     if (encoded->bytes.size() > kAramSize) {
-        setStatus(std::format("Encoded BRR is too large: {} bytes (max {} bytes). "
-                              "Try a shorter range or a lower sample rate.",
-                              encoded->bytes.size(), kAramSize));
+        setStatus(
+            std::format("Encoded BRR is too large: {} bytes (max {} bytes). "
+                        "Try a shorter range or a lower sample rate.",
+                        encoded->bytes.size(), kAramSize));
         return false;
     }
 
@@ -1020,8 +1015,8 @@ bool AssetsPanel::exportSelectedSampleAsBrr() {
     }
 
     const auto& sample = appState_.project->samples()[*sampleIndex];
-    std::string defaultName =
-        sample.name.empty() ? std::format("sample_{:02X}.brr", sample.id) : std::format("{}.brr", sample.name);
+    std::string defaultName = sample.name.empty() ? std::format("sample_{:02X}.brr", sample.id)
+                                                  : std::format("{}.brr", sample.name);
 
     NFD::UniquePath outPath;
     nfdfilteritem_t filterItem[1] = {{"BRR files", "brr"}};
@@ -1063,9 +1058,10 @@ void AssetsPanel::drawInstrumentsTab() {
 
     auto& project = *appState_.project;
     auto& instruments = project.instruments();
-    const int userInstrumentCount = static_cast<int>(std::count_if(
-        instruments.begin(), instruments.end(),
-        [](const nspc::NspcInstrument& instrument) { return instrument.contentOrigin == nspc::NspcContentOrigin::UserProvided; }));
+    const int userInstrumentCount = static_cast<int>(
+        std::count_if(instruments.begin(), instruments.end(), [](const nspc::NspcInstrument& instrument) {
+            return instrument.contentOrigin == nspc::NspcContentOrigin::UserProvided;
+        }));
     const int engineInstrumentCount = static_cast<int>(instruments.size()) - userInstrumentCount;
 
     if (findInstrumentIndexById(appState_.selectedInstrumentId).has_value()) {
@@ -1079,9 +1075,9 @@ void AssetsPanel::drawInstrumentsTab() {
     }
     appState_.selectedInstrumentId = selectedInstrumentId_;
     const auto selectedInstrumentIndex = findInstrumentIndexById(selectedInstrumentId_);
-    const bool selectedInstrumentLocked =
-        selectedInstrumentIndex.has_value() && appState_.lockEngineContent &&
-        instruments[*selectedInstrumentIndex].contentOrigin == nspc::NspcContentOrigin::EngineProvided;
+    const bool selectedInstrumentLocked = selectedInstrumentIndex.has_value() && appState_.lockEngineContent &&
+                                          instruments[*selectedInstrumentIndex].contentOrigin ==
+                                              nspc::NspcContentOrigin::EngineProvided;
 
     handleInstrumentKeyboardPreview();
 
@@ -1180,7 +1176,8 @@ void AssetsPanel::drawInstrumentsTab() {
     ImGui::PushFont(ntrak::app::App::fonts().mono, 16.0f);
 
     const float statusReserve =
-        status_.empty() ? 0.0f : (ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetStyle().ItemSpacing.y + 8.0f);
+        status_.empty() ? 0.0f
+                        : (ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetStyle().ItemSpacing.y + 8.0f);
     const float tableHeight = std::max(120.0f, ImGui::GetContentRegionAvail().y - statusReserve);
     if (ImGui::BeginTable("InstrumentsTable", 4,
                           ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY |
@@ -1204,8 +1201,7 @@ void AssetsPanel::drawInstrumentsTab() {
                 appState_.selectedInstrumentId = selectedInstrumentId_;
             }
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) &&
-                !(appState_.lockEngineContent &&
-                  instrument.contentOrigin == nspc::NspcContentOrigin::EngineProvided)) {
+                !(appState_.lockEngineContent && instrument.contentOrigin == nspc::NspcContentOrigin::EngineProvided)) {
                 instrumentEditorIsNew_ = false;
                 instrumentDraft_.id = instrument.id;
                 instrumentDraft_.name = instrument.name;
@@ -1243,18 +1239,19 @@ void AssetsPanel::drawSamplesTab() {
 
     auto& project = *appState_.project;
     auto& samples = project.samples();
-    const int userSampleCount = static_cast<int>(std::count_if(
-        samples.begin(), samples.end(),
-        [](const nspc::BrrSample& sample) { return sample.contentOrigin == nspc::NspcContentOrigin::UserProvided; }));
+    const int userSampleCount =
+        static_cast<int>(std::count_if(samples.begin(), samples.end(), [](const nspc::BrrSample& sample) {
+            return sample.contentOrigin == nspc::NspcContentOrigin::UserProvided;
+        }));
     const int engineSampleCount = static_cast<int>(samples.size()) - userSampleCount;
 
     if (!findSampleIndexById(selectedSampleId_).has_value()) {
         selectedSampleId_ = -1;
     }
     const auto selectedSampleIndex = findSampleIndexById(selectedSampleId_);
-    const bool selectedSampleLocked =
-        selectedSampleIndex.has_value() && appState_.lockEngineContent &&
-        samples[*selectedSampleIndex].contentOrigin == nspc::NspcContentOrigin::EngineProvided;
+    const bool selectedSampleLocked = selectedSampleIndex.has_value() && appState_.lockEngineContent &&
+                                      samples[*selectedSampleIndex].contentOrigin ==
+                                          nspc::NspcContentOrigin::EngineProvided;
 
     ImGui::PushFont(ntrak::app::App::fonts().mono, 14.0f);
 
@@ -1290,8 +1287,8 @@ void AssetsPanel::drawSamplesTab() {
                                        (sample.data.size() % 9u == 0u);
             const int blockCount = static_cast<int>(sample.data.size() / 9u);
             if (sampleDraft_.loopEnabled && blockCount > 0) {
-                sampleDraft_.loopBlock =
-                    std::clamp<int>((sample.originalLoopAddr - sample.originalAddr) / 9, 0, blockCount - 1);
+                sampleDraft_.loopBlock = std::clamp<int>((sample.originalLoopAddr - sample.originalAddr) / 9, 0,
+                                                         blockCount - 1);
             } else {
                 sampleDraft_.loopBlock = 0;
             }
@@ -1334,9 +1331,9 @@ void AssetsPanel::drawSamplesTab() {
     ImGui::SameLine();
 
     if (const auto index = findSampleIndexById(selectedSampleId_); index.has_value()) {
-        ImGui::BeginDisabled(samples[*index].contentOrigin == nspc::NspcContentOrigin::UserProvided ||
-                             (appState_.lockEngineContent &&
-                              samples[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided));
+        ImGui::BeginDisabled(
+            samples[*index].contentOrigin == nspc::NspcContentOrigin::UserProvided ||
+            (appState_.lockEngineContent && samples[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided));
         if (ImGui::Button("User")) {
             (void)project.setSampleContentOrigin(selectedSampleId_, nspc::NspcContentOrigin::UserProvided);
         }
@@ -1363,7 +1360,8 @@ void AssetsPanel::drawSamplesTab() {
     ImGui::PushFont(ntrak::app::App::fonts().mono, 16.0f);
 
     const float statusReserve =
-        status_.empty() ? 0.0f : (ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetStyle().ItemSpacing.y + 8.0f);
+        status_.empty() ? 0.0f
+                        : (ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetStyle().ItemSpacing.y + 8.0f);
     const float tableHeight = std::max(120.0f, ImGui::GetContentRegionAvail().y - statusReserve);
     if (ImGui::BeginTable("SamplesTable", 6,
                           ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_ScrollY |
@@ -1401,8 +1399,8 @@ void AssetsPanel::drawSamplesTab() {
                                            (sample.data.size() % 9u == 0u);
                 const int blockCount = static_cast<int>(sample.data.size() / 9u);
                 if (sampleDraft_.loopEnabled && blockCount > 0) {
-                    sampleDraft_.loopBlock =
-                        std::clamp<int>((sample.originalLoopAddr - sample.originalAddr) / 9, 0, blockCount - 1);
+                    sampleDraft_.loopBlock = std::clamp<int>((sample.originalLoopAddr - sample.originalAddr) / 9, 0,
+                                                             blockCount - 1);
                 } else {
                     sampleDraft_.loopBlock = 0;
                 }
@@ -1447,15 +1445,13 @@ void AssetsPanel::drawInstrumentEditor() {
     }
 
     ImGui::Text("Instrument %02X", std::max(instrumentDraft_.id, 0));
-    const bool instrumentDraftLocked =
-        !instrumentEditorIsNew_ && appState_.project.has_value() &&
-        [&]() {
-            if (const auto index = findInstrumentIndexById(instrumentDraft_.id); index.has_value()) {
-                return appState_.lockEngineContent &&
-                       appState_.project->instruments()[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided;
-            }
-            return false;
-        }();
+    const bool instrumentDraftLocked = !instrumentEditorIsNew_ && appState_.project.has_value() && [&]() {
+        if (const auto index = findInstrumentIndexById(instrumentDraft_.id); index.has_value()) {
+            return appState_.lockEngineContent &&
+                   appState_.project->instruments()[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided;
+        }
+        return false;
+    }();
 
     if (instrumentDraftLocked) {
         ImGui::TextDisabled("Engine instrument is locked from edits.");
@@ -1513,8 +1509,8 @@ void AssetsPanel::drawInstrumentEditor() {
 
     // Decode ADSR1: [7:ADSR Enable] [6-4:Decay 0-7] [3-0:Attack 0-15]
     bool adsrEnable = (instrumentDraft_.adsr1 & 0x80) != 0;
-    int attack = instrumentDraft_.adsr1 & 0x0F;         // bits 0-3 (4-bit attack rate)
-    int decay = (instrumentDraft_.adsr1 >> 4) & 0x07;   // bits 4-6 (3-bit decay rate)
+    int attack = instrumentDraft_.adsr1 & 0x0F;        // bits 0-3 (4-bit attack rate)
+    int decay = (instrumentDraft_.adsr1 >> 4) & 0x07;  // bits 4-6 (3-bit decay rate)
 
     // Decode ADSR2: [7-5:Sustain Level 0-7] [4-0:Sustain Rate 0-31]
     int sustainLevel = (instrumentDraft_.adsr2 >> 5) & 0x07;  // bits 5-7 (3-bit sustain level)
@@ -1541,8 +1537,9 @@ void AssetsPanel::drawInstrumentEditor() {
             instrumentDraft_.adsr1 = (instrumentDraft_.adsr1 & 0xF0) | (attack & 0x0F);
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Attack rate (0=slow, 15=fast). How quickly the sound reaches full volume.\n"
-                             "Rate = N*2+1, Step = +32 (or +1024 when Rate=31)");
+            ImGui::SetTooltip(
+                "Attack rate (0=slow, 15=fast). How quickly the sound reaches full volume.\n"
+                "Rate = N*2+1, Step = +32 (or +1024 when Rate=31)");
         }
 
         if (ImGui::SliderInt("Decay", &decay, 0, 7)) {
@@ -1550,8 +1547,9 @@ void AssetsPanel::drawInstrumentEditor() {
             instrumentDraft_.adsr1 = (instrumentDraft_.adsr1 & 0x8F) | ((decay & 0x07) << 4);
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Decay rate (0=slow, 7=fast). How quickly volume falls to sustain level after attack.\n"
-                             "Rate = N*2+16");
+            ImGui::SetTooltip(
+                "Decay rate (0=slow, 7=fast). How quickly volume falls to sustain level after attack.\n"
+                "Rate = N*2+16");
         }
 
         if (ImGui::SliderInt("Sustain Level", &sustainLevel, 0, 7)) {
@@ -1559,8 +1557,9 @@ void AssetsPanel::drawInstrumentEditor() {
             instrumentDraft_.adsr2 = (instrumentDraft_.adsr2 & 0x1F) | ((sustainLevel & 0x07) << 5);
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Sustain level (0=silent, 7=loud). Volume level held while note is playing.\n"
-                             "Boundary = (N+1)*256");
+            ImGui::SetTooltip(
+                "Sustain level (0=silent, 7=loud). Volume level held while note is playing.\n"
+                "Boundary = (N+1)*256");
         }
 
         if (ImGui::SliderInt("Sustain Rate", &sustainRate, 0, 31)) {
@@ -1568,8 +1567,9 @@ void AssetsPanel::drawInstrumentEditor() {
             instrumentDraft_.adsr2 = (instrumentDraft_.adsr2 & 0xE0) | (sustainRate & 0x1F);
         }
         if (ImGui::IsItemHovered()) {
-            ImGui::SetTooltip("Sustain rate (0=slowest, 31=fastest). How sustain level changes over time.\n"
-                             "Rate = N");
+            ImGui::SetTooltip(
+                "Sustain rate (0=slowest, 31=fastest). How sustain level changes over time.\n"
+                "Rate = N");
         }
 
         ImGui::EndDisabled();
@@ -1601,11 +1601,10 @@ void AssetsPanel::drawInstrumentEditor() {
                 instrumentDraft_.gain = 0x80 | ((gainMode & 0x03) << 5) | (gainRate & 0x1F);
             }
             if (ImGui::IsItemHovered()) {
-                const char* tooltips[] = {
-                    "Linear Decrease: Rate=N, Step=-32",
-                    "Exponential Decrease: Rate=N, Step=-(((Level-1)>>8)+1)",
-                    "Linear Increase: Rate=N, Step=+32",
-                    "Bent Increase: Rate=N, Step=+32 if Level<0x600, else +8"};
+                const char* tooltips[] = {"Linear Decrease: Rate=N, Step=-32",
+                                          "Exponential Decrease: Rate=N, Step=-(((Level-1)>>8)+1)",
+                                          "Linear Increase: Rate=N, Step=+32",
+                                          "Bent Increase: Rate=N, Step=+32 if Level<0x600, else +8"};
                 ImGui::SetTooltip("%s", tooltips[gainMode]);
             }
 
@@ -1647,8 +1646,8 @@ void AssetsPanel::drawInstrumentEditor() {
         // Grid lines
         for (int i = 0; i <= 4; ++i) {
             const float y = canvasPos.y + (canvasSize.y * i / 4.0F);
-            drawList->AddLine(ImVec2(canvasPos.x, y), ImVec2(canvasPos.x + canvasSize.x, y),
-                              IM_COL32(60, 60, 60, 255), 1.0F);
+            drawList->AddLine(ImVec2(canvasPos.x, y), ImVec2(canvasPos.x + canvasSize.x, y), IM_COL32(60, 60, 60, 255),
+                              1.0F);
         }
 
         if (vizAdsrEnable) {
@@ -1658,10 +1657,10 @@ void AssetsPanel::drawInstrumentEditor() {
 
             // Calculate phase durations based on rates (higher rate = faster = shorter)
             // Using approximate relative timing (inverse of rate for simplicity)
-            const int attackRate = vizAttack * 2 + 1;  // Attack: N*2+1
-            const int decayRate = vizDecay * 2 + 16;   // Decay: N*2+16
+            const int attackRate = vizAttack * 2 + 1;     // Attack: N*2+1
+            const int decayRate = vizDecay * 2 + 16;      // Decay: N*2+16
             const int sustainRateValue = vizSustainRate;  // Sustain: N
-            const int releaseRate = 31;  // Release: fixed at 31
+            const int releaseRate = 31;                   // Release: fixed at 31
 
             // Convert rates to relative durations (inverse relationship: slower rate = longer time)
             // Add +1 to avoid division by zero
@@ -1687,20 +1686,20 @@ void AssetsPanel::drawInstrumentEditor() {
 
             // Draw Attack phase (starts at zero, rises to max)
             const float attackEndX = canvasPos.x + attackWidth;
-            drawList->AddLine(ImVec2(canvasPos.x, zeroY), ImVec2(attackEndX, maxY),
-                              IM_COL32(100, 200, 255, 255), 2.0F);
+            drawList->AddLine(ImVec2(canvasPos.x, zeroY), ImVec2(attackEndX, maxY), IM_COL32(100, 200, 255, 255), 2.0F);
 
             // Draw Decay phase (max to sustain level)
             const float sustainY = canvasPos.y + canvasSize.y * (1.0F - sustainLevelValue / maxLevel);
             const float decayEndX = attackEndX + decayWidth;
-            drawList->AddLine(ImVec2(attackEndX, maxY), ImVec2(decayEndX, sustainY),
-                              IM_COL32(100, 200, 255, 255), 2.0F);
+            drawList->AddLine(ImVec2(attackEndX, maxY), ImVec2(decayEndX, sustainY), IM_COL32(100, 200, 255, 255),
+                              2.0F);
 
             // Draw Sustain phase (decays toward zero at sustain rate)
             const float sustainEndX = decayEndX + sustainWidth;
             // Sustain rate determines how much it decays: higher rate = more decay toward zero
             // Rate 0 = flat, higher rates decay more steeply toward zero
-            const float sustainDecayAmount = sustainRateValue > 0 ? (sustainLevelValue / maxLevel) * canvasSize.y * 0.6F : 0.0F;
+            const float sustainDecayAmount = sustainRateValue > 0 ? (sustainLevelValue / maxLevel) * canvasSize.y * 0.6F
+                                                                  : 0.0F;
             const float sustainEndY = std::min(sustainY + sustainDecayAmount, zeroY);
             drawList->AddLine(ImVec2(decayEndX, sustainY), ImVec2(sustainEndX, sustainEndY),
                               IM_COL32(100, 200, 255, 255), 2.0F);
@@ -1711,14 +1710,14 @@ void AssetsPanel::drawInstrumentEditor() {
                               IM_COL32(150, 150, 150, 255), 2.0F);
 
             // Labels at phase boundaries
-            drawList->AddText(ImVec2(canvasPos.x + attackWidth * 0.5F - 5, zeroY - 15),
-                              IM_COL32(200, 200, 200, 255), "A");
-            drawList->AddText(ImVec2(attackEndX + decayWidth * 0.5F - 5, zeroY - 15),
-                              IM_COL32(200, 200, 200, 255), "D");
-            drawList->AddText(ImVec2(decayEndX + sustainWidth * 0.5F - 5, zeroY - 15),
-                              IM_COL32(200, 200, 200, 255), "S");
-            drawList->AddText(ImVec2(sustainEndX + releaseWidth * 0.5F - 5, zeroY - 15),
-                              IM_COL32(150, 150, 150, 255), "R");
+            drawList->AddText(ImVec2(canvasPos.x + attackWidth * 0.5F - 5, zeroY - 15), IM_COL32(200, 200, 200, 255),
+                              "A");
+            drawList->AddText(ImVec2(attackEndX + decayWidth * 0.5F - 5, zeroY - 15), IM_COL32(200, 200, 200, 255),
+                              "D");
+            drawList->AddText(ImVec2(decayEndX + sustainWidth * 0.5F - 5, zeroY - 15), IM_COL32(200, 200, 200, 255),
+                              "S");
+            drawList->AddText(ImVec2(sustainEndX + releaseWidth * 0.5F - 5, zeroY - 15), IM_COL32(150, 150, 150, 255),
+                              "R");
         } else {
             // Draw GAIN envelope curve
             if (!vizCustomGain) {
@@ -1738,8 +1737,8 @@ void AssetsPanel::drawInstrumentEditor() {
                     const float endY = canvasPos.y + canvasSize.y;
                     if (vizGainMode == 0) {
                         // Linear decrease
-                        drawList->AddLine(ImVec2(canvasPos.x, startY), ImVec2(endX, endY),
-                                          IM_COL32(255, 150, 100, 255), 2.0F);
+                        drawList->AddLine(ImVec2(canvasPos.x, startY), ImVec2(endX, endY), IM_COL32(255, 150, 100, 255),
+                                          2.0F);
                         drawList->AddText(ImVec2(canvasPos.x + 5, canvasPos.y + canvasSize.y - 15),
                                           IM_COL32(255, 150, 100, 255), "Linear Dec");
                     } else {
@@ -1747,7 +1746,8 @@ void AssetsPanel::drawInstrumentEditor() {
                         for (float x = 0; x < canvasSize.x - 20; x += 5.0F) {
                             const float t = x / (canvasSize.x - 20);
                             const float curve = 1.0F - (1.0F - std::exp(-3.0F * t));
-                            const float y1 = startY + (endY - startY) * (x > 0 ? std::exp(-3.0F * (x - 5) / (canvasSize.x - 20)) : 0);
+                            const float y1 = startY + (endY - startY) *
+                                                          (x > 0 ? std::exp(-3.0F * (x - 5) / (canvasSize.x - 20)) : 0);
                             const float y2 = startY + (endY - startY) * curve;
                             drawList->AddLine(ImVec2(canvasPos.x + x - 5, y1), ImVec2(canvasPos.x + x, y2),
                                               IM_COL32(255, 150, 100, 255), 2.0F);
@@ -1760,8 +1760,8 @@ void AssetsPanel::drawInstrumentEditor() {
                     const float endY = canvasPos.y;
                     if (vizGainMode == 2) {
                         // Linear increase
-                        drawList->AddLine(ImVec2(canvasPos.x, startY), ImVec2(endX, endY),
-                                          IM_COL32(100, 255, 150, 255), 2.0F);
+                        drawList->AddLine(ImVec2(canvasPos.x, startY), ImVec2(endX, endY), IM_COL32(100, 255, 150, 255),
+                                          2.0F);
                         drawList->AddText(ImVec2(canvasPos.x + 5, canvasPos.y + canvasSize.y - 15),
                                           IM_COL32(100, 255, 150, 255), "Linear Inc");
                     } else {
@@ -1896,7 +1896,8 @@ void AssetsPanel::drawInstrumentEditor() {
     //                 instrumentDraft_.basePitchMult = static_cast<uint8_t>(newPitch >> 8);
     //                 instrumentDraft_.fracPitchMult = static_cast<uint8_t>(newPitch & 0xFF);
 
-    //                 setStatus(std::format("Auto-tuned: detected {:.1f} Hz ({:.1f} semitones from C-4), set pitch to 0x{:04X}",
+    //                 setStatus(std::format("Auto-tuned: detected {:.1f} Hz ({:.1f} semitones from C-4), set pitch to
+    //                 0x{:04X}",
     //                                     *detectedFreq, semitonesFromC4, newPitch));
     //             }
     //         }
@@ -1948,15 +1949,13 @@ void AssetsPanel::drawSampleEditor() {
     }
 
     ImGui::Text("Sample %02X", std::max(sampleDraft_.id, 0));
-    const bool sampleDraftLocked =
-        !sampleEditorIsNew_ && appState_.project.has_value() &&
-        [&]() {
-            if (const auto index = findSampleIndexById(sampleDraft_.id); index.has_value()) {
-                return appState_.lockEngineContent &&
-                       appState_.project->samples()[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided;
-            }
-            return false;
-        }();
+    const bool sampleDraftLocked = !sampleEditorIsNew_ && appState_.project.has_value() && [&]() {
+        if (const auto index = findSampleIndexById(sampleDraft_.id); index.has_value()) {
+            return appState_.lockEngineContent &&
+                   appState_.project->samples()[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided;
+        }
+        return false;
+    }();
 
     if (sampleDraftLocked) {
         ImGui::TextDisabled("Engine sample is locked from edits.");
@@ -2018,11 +2017,14 @@ void AssetsPanel::drawSampleEditor() {
         ImGui::Text("WAV Sample Tools");
         const int sourceCount = static_cast<int>(sampleDraft_.wavSourcePcm.size());
         sampleDraft_.wavTrimStartSample = std::clamp(sampleDraft_.wavTrimStartSample, 0, std::max(sourceCount - 1, 0));
-        sampleDraft_.wavTrimEndSample = std::clamp(sampleDraft_.wavTrimEndSample, sampleDraft_.wavTrimStartSample + 1, sourceCount);
-        sampleDraft_.wavLoopSample = std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample, sampleDraft_.wavTrimEndSample - 1);
+        sampleDraft_.wavTrimEndSample = std::clamp(sampleDraft_.wavTrimEndSample, sampleDraft_.wavTrimStartSample + 1,
+                                                   sourceCount);
+        sampleDraft_.wavLoopSample = std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample,
+                                                sampleDraft_.wavTrimEndSample - 1);
 
         ImGui::TextDisabled("Source samples: %d (%.2fs @ %uHz)", sourceCount,
-                            static_cast<float>(sourceCount) / static_cast<float>(std::max<uint32_t>(sampleDraft_.targetSampleRate, 1u)),
+                            static_cast<float>(sourceCount) /
+                                static_cast<float>(std::max<uint32_t>(sampleDraft_.targetSampleRate, 1u)),
                             sampleDraft_.targetSampleRate);
 
         ImGui::SetNextItemWidth(160.0f);
@@ -2031,13 +2033,14 @@ void AssetsPanel::drawSampleEditor() {
 
         ImGui::SetNextItemWidth(160.0f);
         ImGui::InputInt("End Sample", &sampleDraft_.wavTrimEndSample, 1, 64);
-        sampleDraft_.wavTrimEndSample = std::clamp(sampleDraft_.wavTrimEndSample, sampleDraft_.wavTrimStartSample + 1, sourceCount);
+        sampleDraft_.wavTrimEndSample = std::clamp(sampleDraft_.wavTrimEndSample, sampleDraft_.wavTrimStartSample + 1,
+                                                   sourceCount);
 
         if (sampleDraft_.loopEnabled) {
             ImGui::SetNextItemWidth(160.0f);
             ImGui::InputInt("Loop Sample", &sampleDraft_.wavLoopSample, 1, 64);
-            sampleDraft_.wavLoopSample =
-                std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample, sampleDraft_.wavTrimEndSample - 1);
+            sampleDraft_.wavLoopSample = std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample,
+                                                    sampleDraft_.wavTrimEndSample - 1);
         } else {
             sampleDraft_.wavLoopSample = sampleDraft_.wavTrimStartSample;
         }
@@ -2064,9 +2067,8 @@ void AssetsPanel::drawSampleEditor() {
         const size_t wavPointCount = std::min(wavSourceSize, wavMaxPoints);
         wavPlot.resize(wavPointCount);
         for (size_t i = 0; i < wavPointCount; ++i) {
-            const size_t sourceIndex = (wavSourceSize <= 1)
-                                           ? 0
-                                           : (i * (wavSourceSize - 1)) / std::max<size_t>(wavPointCount - 1, 1);
+            const size_t sourceIndex =
+                (wavSourceSize <= 1) ? 0 : (i * (wavSourceSize - 1)) / std::max<size_t>(wavPointCount - 1, 1);
             wavPlot[i] = static_cast<float>(sampleDraft_.wavSourcePcm[sourceIndex]) / 32768.0f;
         }
 
@@ -2088,11 +2090,13 @@ void AssetsPanel::drawSampleEditor() {
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         const float startX = sampleToX(sampleDraft_.wavTrimStartSample);
         const float endX = sampleToX(std::max(sampleDraft_.wavTrimEndSample - 1, sampleDraft_.wavTrimStartSample));
-        drawList->AddLine(ImVec2(startX, wavPlotMin.y), ImVec2(startX, wavPlotMax.y), IM_COL32(100, 220, 255, 255), 2.0f);
+        drawList->AddLine(ImVec2(startX, wavPlotMin.y), ImVec2(startX, wavPlotMax.y), IM_COL32(100, 220, 255, 255),
+                          2.0f);
         drawList->AddLine(ImVec2(endX, wavPlotMin.y), ImVec2(endX, wavPlotMax.y), IM_COL32(255, 110, 110, 255), 2.0f);
         if (sampleDraft_.loopEnabled) {
             const float loopX = sampleToX(sampleDraft_.wavLoopSample);
-            drawList->AddLine(ImVec2(loopX, wavPlotMin.y), ImVec2(loopX, wavPlotMax.y), IM_COL32(255, 210, 110, 255), 2.0f);
+            drawList->AddLine(ImVec2(loopX, wavPlotMin.y), ImVec2(loopX, wavPlotMax.y), IM_COL32(255, 210, 110, 255),
+                              2.0f);
         }
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && sourceCount > 1) {
@@ -2101,14 +2105,15 @@ void AssetsPanel::drawSampleEditor() {
             const int clickedSample = static_cast<int>(std::lround(t * static_cast<float>(sourceCount - 1)));
             if (markerMode == 0) {
                 sampleDraft_.wavTrimStartSample = std::min(clickedSample, sampleDraft_.wavTrimEndSample - 1);
-                sampleDraft_.wavLoopSample =
-                    std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample, sampleDraft_.wavTrimEndSample - 1);
+                sampleDraft_.wavLoopSample = std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample,
+                                                        sampleDraft_.wavTrimEndSample - 1);
             } else if (markerMode == 1 && sampleDraft_.loopEnabled) {
-                sampleDraft_.wavLoopSample = std::clamp(clickedSample, sampleDraft_.wavTrimStartSample, sampleDraft_.wavTrimEndSample - 1);
+                sampleDraft_.wavLoopSample = std::clamp(clickedSample, sampleDraft_.wavTrimStartSample,
+                                                        sampleDraft_.wavTrimEndSample - 1);
             } else {
                 sampleDraft_.wavTrimEndSample = std::max(clickedSample + 1, sampleDraft_.wavTrimStartSample + 1);
-                sampleDraft_.wavLoopSample =
-                    std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample, sampleDraft_.wavTrimEndSample - 1);
+                sampleDraft_.wavLoopSample = std::clamp(sampleDraft_.wavLoopSample, sampleDraft_.wavTrimStartSample,
+                                                        sampleDraft_.wavTrimEndSample - 1);
             }
         }
 
@@ -2158,9 +2163,8 @@ void AssetsPanel::drawSampleEditor() {
         plot.resize(pointCount);
 
         for (size_t i = 0; i < pointCount; ++i) {
-            const size_t sourceIndex = (sourceSize <= 1)
-                                           ? 0
-                                           : (i * (sourceSize - 1)) / std::max<size_t>(pointCount - 1, 1);
+            const size_t sourceIndex = (sourceSize <= 1) ? 0
+                                                         : (i * (sourceSize - 1)) / std::max<size_t>(pointCount - 1, 1);
             plot[i] = static_cast<float>(sampleWavePreview_[sourceIndex]) / 32768.0f;
         }
 
@@ -2168,7 +2172,8 @@ void AssetsPanel::drawSampleEditor() {
                          ImVec2(520.0f, 140.0f));
 
         if (sampleDraft_.loopEnabled && !sampleWavePreview_.empty() && blockCount > 0) {
-            const int loopSample = std::clamp(sampleDraft_.loopBlock * 16, 0, static_cast<int>(sampleWavePreview_.size()) - 1);
+            const int loopSample = std::clamp(sampleDraft_.loopBlock * 16, 0,
+                                              static_cast<int>(sampleWavePreview_.size()) - 1);
             const float t = static_cast<float>(loopSample) / static_cast<float>(sampleWavePreview_.size() - 1);
             const ImVec2 plotMin = ImGui::GetItemRectMin();
             const ImVec2 plotMax = ImGui::GetItemRectMax();
@@ -2210,8 +2215,8 @@ bool AssetsPanel::saveInstrumentDraft() {
     auto& project = *appState_.project;
     auto& instruments = project.instruments();
     if (!instrumentEditorIsNew_) {
-        if (const auto index = findInstrumentIndexById(instrumentDraft_.id); index.has_value() &&
-            appState_.lockEngineContent &&
+        if (const auto index = findInstrumentIndexById(instrumentDraft_.id);
+            index.has_value() && appState_.lockEngineContent &&
             instruments[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided) {
             setStatus(std::format("Instrument {:02X} is engine-owned and locked", instrumentDraft_.id));
             return false;
@@ -2239,8 +2244,8 @@ bool AssetsPanel::saveInstrumentDraft() {
     const auto& config = project.engineConfig();
     const uint8_t entrySize = std::clamp<uint8_t>(config.instrumentEntryBytes, 5, 6);
     if (config.instrumentHeaders != 0) {
-        const uint32_t address32 =
-            static_cast<uint32_t>(config.instrumentHeaders) + static_cast<uint32_t>(instrument.id) * entrySize;
+        const uint32_t address32 = static_cast<uint32_t>(config.instrumentHeaders) +
+                                   static_cast<uint32_t>(instrument.id) * entrySize;
         if (address32 + entrySize <= kAramSize) {
             instrument.originalAddr = static_cast<uint16_t>(address32);
         }
@@ -2283,8 +2288,8 @@ bool AssetsPanel::saveSampleDraft() {
     auto& project = *appState_.project;
     auto& samples = project.samples();
     if (!sampleEditorIsNew_) {
-        if (const auto index = findSampleIndexById(sampleDraft_.id); index.has_value() &&
-            appState_.lockEngineContent &&
+        if (const auto index = findSampleIndexById(sampleDraft_.id);
+            index.has_value() && appState_.lockEngineContent &&
             samples[*index].contentOrigin == nspc::NspcContentOrigin::EngineProvided) {
             setStatus(std::format("Sample {:02X} is engine-owned and locked", sampleDraft_.id));
             return false;
@@ -2319,12 +2324,12 @@ bool AssetsPanel::saveSampleDraft() {
     sample.contentOrigin = nspc::NspcContentOrigin::UserProvided;
 
     const int finalBlockCount = static_cast<int>(sample.data.size() / 9u);
-    const int finalLoopBlock = sampleDraft_.loopEnabled
-                                   ? std::clamp(sampleDraft_.loopBlock, 0, std::max(finalBlockCount - 1, 0))
-                                   : 0;
-    sample.originalLoopAddr = sampleDraft_.loopEnabled
-                                  ? static_cast<uint16_t>(sample.originalAddr + static_cast<uint16_t>(finalLoopBlock * 9))
-                                  : sample.originalAddr;
+    const int finalLoopBlock =
+        sampleDraft_.loopEnabled ? std::clamp(sampleDraft_.loopBlock, 0, std::max(finalBlockCount - 1, 0)) : 0;
+    sample.originalLoopAddr =
+        sampleDraft_.loopEnabled
+            ? static_cast<uint16_t>(sample.originalAddr + static_cast<uint16_t>(finalLoopBlock * 9))
+            : sample.originalAddr;
 
     if (!writeSampleDirectoryEntry(sample.id, sample.originalAddr, sample.originalLoopAddr)) {
         return false;

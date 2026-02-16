@@ -175,6 +175,26 @@ void applyEngineOverrides(json& baseConfigs, const json& overrideConfigs) {
     }
 }
 
+void resolveAddmusickSongIndexPointer(NspcEngineConfig& resolved, std::span<const std::uint8_t> aram) {
+    uint16_t searchStart = resolved.entryPoint;
+    uint16_t searchEnd = searchStart;
+    for (const auto& region : resolved.reserved) {
+        if (region.from <= searchStart && region.to > searchEnd) {
+            searchEnd = region.to;
+        }
+    }
+    if (searchEnd <= searchStart) {
+        searchEnd = static_cast<uint16_t>(std::min<uint32_t>(searchStart + 0x2000U, 0xFFFFU));
+    }
+
+    if (const auto scanned = scanForSongIndexPointer(aram, searchStart, searchEnd); scanned.has_value()) {
+        if (const auto songIndex = readAramWord(aram, *scanned); songIndex.has_value()) {
+            resolved.songIndexPointers = *songIndex + 1;
+            resolved.songIndexPtr = scanned;
+        }
+    }
+}
+
 }  // namespace
 
 std::vector<uint8_t> parseHexBytes(std::string_view hexStr) {
@@ -575,6 +595,7 @@ NspcEngineConfig parseEngineConfigEntry(const json& item) {
     NspcEngineConfig config;
     config.id = item.value("id", "");
     config.engineVersion = item.value("engineVersion", "");
+    config.engineVariant = item.value("engineVariant", "");
     config.name = item.value("name", "");
     config.entryPoint = item.contains("entryPoint") ? parseHexJson(item["entryPoint"]) : 0;
 
@@ -608,14 +629,14 @@ NspcEngineConfig parseEngineConfigEntry(const json& item) {
     config.percussionHeaders = item.contains("percussionHeaders") ? parseHexJson(item["percussionHeaders"]) : 0;
     config.songIndexPointers = item.contains("songIndexPointers") ? parseHexJson(item["songIndexPointers"]) : 0;
     if (item.contains("songTriggerPort")) {
-        config.songTriggerPort = static_cast<uint8_t>(parseHexJson(item["songTriggerPort"]) & 0x03u);
+        config.songTriggerPort = static_cast<uint8_t>(parseHexJson(item["songTriggerPort"]) & 0x03U);
     }
     if (item.contains("songTriggerOffset")) {
-        config.songTriggerOffset = static_cast<uint8_t>(parseHexJson(item["songTriggerOffset"]) & 0xFFu);
+        config.songTriggerOffset = static_cast<uint8_t>(parseHexJson(item["songTriggerOffset"]) & 0xFFU);
     }
     if (item.contains("instrumentEntryBytes")) {
         const uint16_t parsedSize = parseHexJson(item["instrumentEntryBytes"]);
-        config.instrumentEntryBytes = static_cast<uint8_t>(std::clamp<uint16_t>(parsedSize, 5u, 6u));
+        config.instrumentEntryBytes = static_cast<uint8_t>(std::clamp<uint16_t>(parsedSize, 5U, 6U));
     }
     config.echoBuffer = item.contains("echoBuffer") ? parseHexJson(item["echoBuffer"]) : 0;
     config.echoBufferLen = item.contains("echoBufferLen") ? parseHexJson(item["echoBufferLen"]) : 0;
@@ -715,7 +736,7 @@ NspcEngineConfig resolveEngineConfigPointers(const NspcEngineConfig& config, std
     if (config.defaultDspTablePtr.has_value()) {
         if (const auto sampleHeaders = readDefaultDspValue(aram, *config.defaultDspTablePtr, kDspDirReg);
             sampleHeaders.has_value()) {
-            resolved.sampleHeaders = static_cast<uint16_t>(*sampleHeaders << 8u);
+            resolved.sampleHeaders = static_cast<uint16_t>(*sampleHeaders << 8U);
         }
 
         if (const auto echoStart = readDefaultDspValue(aram, *config.defaultDspTablePtr, kDspEchoStartReg);
@@ -729,38 +750,84 @@ NspcEngineConfig resolveEngineConfigPointers(const NspcEngineConfig& config, std
         }
     }
 
-    const auto instrumentLo = config.instrumentHeaderPtrLo.has_value() ? readAramByte(aram, *config.instrumentHeaderPtrLo)
-                                                                       : std::nullopt;
-    const auto instrumentHi = config.instrumentHeaderPtrHi.has_value() ? readAramByte(aram, *config.instrumentHeaderPtrHi)
-                                                                       : std::nullopt;
+    const auto instrumentLo =
+        config.instrumentHeaderPtrLo.has_value() ? readAramByte(aram, *config.instrumentHeaderPtrLo) : std::nullopt;
+    const auto instrumentHi =
+        config.instrumentHeaderPtrHi.has_value() ? readAramByte(aram, *config.instrumentHeaderPtrHi) : std::nullopt;
     if (instrumentLo.has_value() && instrumentHi.has_value()) {
-        resolved.instrumentHeaders =
-            static_cast<uint16_t>(*instrumentLo | (static_cast<uint16_t>(*instrumentHi) << 8));
+        resolved.instrumentHeaders = static_cast<uint16_t>(*instrumentLo | (static_cast<uint16_t>(*instrumentHi) << 8));
     }
-    const auto percussionLo = config.percussionHeaderPtrLo.has_value()
-                                  ? readAramByte(aram, *config.percussionHeaderPtrLo)
-                                  : std::nullopt;
-    const auto percussionHi = config.percussionHeaderPtrHi.has_value()
-                                  ? readAramByte(aram, *config.percussionHeaderPtrHi)
-                                  : std::nullopt;
+    const auto percussionLo =
+        config.percussionHeaderPtrLo.has_value() ? readAramByte(aram, *config.percussionHeaderPtrLo) : std::nullopt;
+    const auto percussionHi =
+        config.percussionHeaderPtrHi.has_value() ? readAramByte(aram, *config.percussionHeaderPtrHi) : std::nullopt;
     if (percussionLo.has_value() && percussionHi.has_value()) {
-        resolved.percussionHeaders =
-            static_cast<uint16_t>(*percussionLo | (static_cast<uint16_t>(*percussionHi) << 8));
+        resolved.percussionHeaders = static_cast<uint16_t>(*percussionLo | (static_cast<uint16_t>(*percussionHi) << 8));
     }
 
-    if (config.songIndexPtr.has_value()) {
+    if (config.engineVariant == "addmusick") {
+        resolveAddmusickSongIndexPointer(resolved, aram);
+    } else if (config.songIndexPtr.has_value()) {
         if (const auto songIndex = readAramWord(aram, *config.songIndexPtr); songIndex.has_value()) {
-            resolved.songIndexPointers = *songIndex + 1; // The address in the engine is one off from the actual song index data
+            resolved.songIndexPointers = *songIndex + 1;  // The address in the engine is one off from the actual song index data
         }
     }
 
     return resolved;
 }
 
+std::optional<uint16_t> scanForSongIndexPointer(std::span<const std::uint8_t> aram, uint16_t searchStart,
+                                                uint16_t searchEnd) {
+    // SPC700 bytecode pattern for the song pointer read:
+    //   C4 06          mov $06, a       (store song number)
+    //   8F 02 0C       mov $0C, #$02    (set control byte)
+    //   1C             asl a            (double for 16-bit pointer)
+    //   FD             mov y, a
+    //   F6 LL HH       mov a, addr+y    (first read: SongPointers-2)
+    //   [0-3 bytes]    variable (e.g. push a)
+    //   C4 40          mov $40, a
+    //   F6 LL HH       mov a, addr+y    (second read: SongPointers-1) <-- this is songIndexPtr
+    //
+    // Fixed prefix: C4 06 8F 02 0C 1C FD F6 (8 bytes)
+    // Then 2-byte operand + 0-3 variable bytes + C4 40 F6 + 2-byte operand
+    // Minimum total: 8 + 2 + 0 + 2 + 1 + 2 = 15 bytes
+    // Maximum gap between first F6's operand end and C4 40: 3 bytes
+
+    constexpr std::array<uint8_t, 8> kPrefix = {0xC4, 0x06, 0x8F, 0x02, 0x0C, 0x1C, 0xFD, 0xF6};
+
+    const uint32_t end = std::min<uint32_t>(searchEnd, aram.size());
+    if (end < kPrefix.size() + 7U || searchStart >= end) {
+        return std::nullopt;
+    }
+
+    for (uint32_t i = searchStart; i + kPrefix.size() + 7U <= end; ++i) {
+        // Match the fixed prefix.
+        if (!std::equal(kPrefix.begin(), kPrefix.end(), aram.begin() + static_cast<ptrdiff_t>(i))) {
+            continue;
+        }
+
+        // Skip first F6 operand (2 bytes after the prefix).
+        const uint32_t afterFirstF6Operand = i + kPrefix.size() + 2U;
+
+        // Try gap sizes 0-3 to find "C4 40 F6".
+        for (uint32_t gap = 0; gap <= 3U; ++gap) {
+            const uint32_t candidatePos = afterFirstF6Operand + gap;
+            if (candidatePos + 4U >= end) {
+                break;
+            }
+            if (aram[candidatePos] == 0xC4 && aram[candidatePos + 1U] == 0x40 && aram[candidatePos + 2U] == 0xF6) {
+                // The operand of the second F6 is at candidatePos + 3.
+                return static_cast<uint16_t>(candidatePos + 3U);
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 const NspcEngineExtension* findEngineExtension(const NspcEngineConfig& config, std::string_view name) {
-    const auto it =
-        std::find_if(config.extensions.begin(), config.extensions.end(),
-                     [name](const NspcEngineExtension& extension) { return extension.name == name; });
+    const auto it = std::find_if(config.extensions.begin(), config.extensions.end(),
+                                 [name](const NspcEngineExtension& extension) { return extension.name == name; });
     if (it == config.extensions.end()) {
         return nullptr;
     }

@@ -73,7 +73,7 @@ class NspcIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override { fixturesPath_ = getFixturesPath(); }
 
-    std::filesystem::path fixturesPath_;
+    std::filesystem::path fixturesPath_;  // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
 };
 
 //=============================================================================
@@ -95,7 +95,7 @@ TEST_F(NspcIntegrationTest, DISABLED_EditNoteAndCompile) {
 
     // Parse using NspcParser which handles engine detection automatically
     NspcParser parser;
-    auto projectResult = parser.load(std::span<const uint8_t>(*spcData));
+    auto projectResult = NspcParser::load(std::span<const uint8_t>(*spcData));
     ASSERT_TRUE(projectResult.has_value()) << "Failed to parse SPC file: " << static_cast<int>(projectResult.error());
 
     auto& project = *projectResult;
@@ -132,7 +132,7 @@ TEST_F(NspcIntegrationTest, DISABLED_FullRoundTrip) {
     ASSERT_TRUE(spcData.has_value()) << "Failed to load SPC file";
 
     NspcParser parser;
-    auto projectResult = parser.load(std::span<const uint8_t>(*spcData));
+    auto projectResult = NspcParser::load(std::span<const uint8_t>(*spcData));
     ASSERT_TRUE(projectResult.has_value()) << "Failed to parse SPC file: " << static_cast<int>(projectResult.error());
 
     auto& project = *projectResult;
@@ -178,7 +178,7 @@ TEST_F(NspcIntegrationTest, DISABLED_Channel6InstrumentEdit) {
     ASSERT_TRUE(spcData.has_value()) << "Failed to load SPC file";
 
     NspcParser parser;
-    auto projectResult = parser.load(std::span<const uint8_t>(*spcData));
+    auto projectResult = NspcParser::load(std::span<const uint8_t>(*spcData));
     ASSERT_TRUE(projectResult.has_value()) << "Failed to parse SPC file: " << static_cast<int>(projectResult.error());
 
     auto& project = *projectResult;
@@ -376,7 +376,7 @@ class NspcSpcFileTest : public ::testing::TestWithParam<std::string> {
 protected:
     void SetUp() override { fixturesPath_ = getFixturesPath(); }
 
-    std::filesystem::path fixturesPath_;
+    std::filesystem::path fixturesPath_;  // NOLINT(cppcoreguidelines-non-private-member-variables-in-classes)
 };
 
 TEST_P(NspcSpcFileTest, DISABLED_RoundTripEquivalent) {
@@ -389,7 +389,7 @@ TEST_P(NspcSpcFileTest, DISABLED_RoundTripEquivalent) {
     ASSERT_TRUE(spcData.has_value()) << "Failed to load SPC file";
 
     NspcParser parser;
-    auto projectResult = parser.load(std::span<const uint8_t>(*spcData));
+    auto projectResult = NspcParser::load(std::span<const uint8_t>(*spcData));
     ASSERT_TRUE(projectResult.has_value()) << "Failed to parse SPC file: " << static_cast<int>(projectResult.error());
 
     auto& project = *projectResult;

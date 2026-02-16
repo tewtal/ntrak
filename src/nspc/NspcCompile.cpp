@@ -1,9 +1,9 @@
-#include "NspcCompileShared.hpp"
+#include "ntrak/nspc/NspcCompileShared.hpp"
 
 #include <algorithm>
 #include <array>
-#include <functional>
 #include <format>
+#include <functional>
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
@@ -198,8 +198,8 @@ std::expected<uint8_t, std::string> mapCommonVcmdIdToEngine(uint8_t commonId, co
         return it->second;
     }
     if (engine.commandMap.has_value() && map.strictWriteVcmdMap) {
-        return std::unexpected(
-            std::format("VCMD ${:02X} is not mapped for engine '{}'", commonId, engine.name.empty() ? "unknown" : engine.name));
+        return std::unexpected(std::format("VCMD ${:02X} is not mapped for engine '{}'", commonId,
+                                           engine.name.empty() ? "unknown" : engine.name));
     }
     return commonId;
 }
@@ -366,9 +366,8 @@ std::expected<void, std::string> encodeVcmd(const Vcmd& cmd, std::vector<uint8_t
                            return;
                        }
                        if (value.paramCount != *extensionParamCount) {
-                           encodeError = std::format(
-                               "Extension VCMD ${:02X} expected {} params, got {}", value.id, *extensionParamCount,
-                               value.paramCount);
+                           encodeError = std::format("Extension VCMD ${:02X} expected {} params, got {}", value.id,
+                                                     *extensionParamCount, value.paramCount);
                            return;
                        }
 
@@ -395,9 +394,10 @@ std::expected<std::vector<uint8_t>, std::string> encodeEventStream(
     const auto& commandMap = commandMapForEngine(engine);
     const uint8_t noteMaxByRange = static_cast<uint8_t>(
         (commandMap.noteEnd >= commandMap.noteStart) ? (commandMap.noteEnd - commandMap.noteStart) : 0);
-    const uint8_t percussionMaxByRange = static_cast<uint8_t>(
-        (commandMap.percussionEnd >= commandMap.percussionStart) ? (commandMap.percussionEnd - commandMap.percussionStart)
-                                                                 : 0);
+    const uint8_t percussionMaxByRange =
+        static_cast<uint8_t>((commandMap.percussionEnd >= commandMap.percussionStart)
+                                 ? (commandMap.percussionEnd - commandMap.percussionStart)
+                                 : 0);
 
     for (const auto& entry : events) {
         const auto result = std::visit(
@@ -427,8 +427,8 @@ std::expected<std::vector<uint8_t>, std::string> encodeEventStream(
                         pitch = 0x47;
                     }
                     if (pitch > noteMaxByRange) {
-                        warnings.push_back(std::format(
-                            "Note pitch {:02X} exceeds engine note range; clamped to {:02X}", pitch, noteMaxByRange));
+                        warnings.push_back(std::format("Note pitch {:02X} exceeds engine note range; clamped to {:02X}",
+                                                       pitch, noteMaxByRange));
                         pitch = noteMaxByRange;
                     }
                     appendU8(out, static_cast<uint8_t>(commandMap.noteStart + pitch));
@@ -449,9 +449,9 @@ std::expected<std::vector<uint8_t>, std::string> encodeEventStream(
                         index = 0x15;
                     }
                     if (index > percussionMaxByRange) {
-                        warnings.push_back(std::format(
-                            "Percussion index {:02X} exceeds engine range; clamped to {:02X}", index,
-                            percussionMaxByRange));
+                        warnings.push_back(
+                            std::format("Percussion index {:02X} exceeds engine range; clamped to {:02X}", index,
+                                        percussionMaxByRange));
                         index = percussionMaxByRange;
                     }
                     appendU8(out, static_cast<uint8_t>(commandMap.percussionStart + index));
@@ -667,8 +667,9 @@ std::vector<NspcUploadChunk> buildEnabledEngineExtensionPatchChunks(const NspcEn
 
 void sortUploadChunksByAddress(std::vector<NspcUploadChunk>& chunks, bool stableSort) {
     if (stableSort) {
-        std::stable_sort(chunks.begin(), chunks.end(),
-                         [](const NspcUploadChunk& lhs, const NspcUploadChunk& rhs) { return lhs.address < rhs.address; });
+        std::stable_sort(chunks.begin(), chunks.end(), [](const NspcUploadChunk& lhs, const NspcUploadChunk& rhs) {
+            return lhs.address < rhs.address;
+        });
     } else {
         std::sort(chunks.begin(), chunks.end(),
                   [](const NspcUploadChunk& lhs, const NspcUploadChunk& rhs) { return lhs.address < rhs.address; });
@@ -692,8 +693,9 @@ std::expected<void, std::string> validateUploadChunkBoundsAndOverlap(const std::
         const uint32_t prevEnd = static_cast<uint32_t>(prev.address) + static_cast<uint32_t>(prev.bytes.size());
         if (chunk.address < prevEnd) {
             if (detailedOverlapMessage) {
-                const uint16_t prevEndDisplay =
-                    prev.bytes.empty() ? prev.address : static_cast<uint16_t>(std::min<uint32_t>(prevEnd - 1u, 0xFFFFu));
+                const uint16_t prevEndDisplay = prev.bytes.empty()
+                                                    ? prev.address
+                                                    : static_cast<uint16_t>(std::min<uint32_t>(prevEnd - 1u, 0xFFFFu));
                 return std::unexpected(std::format("Upload chunks overlap: {} ends at ${:04X}, {} starts at ${:04X}",
                                                    prev.label, prevEndDisplay, chunk.label, chunk.address));
             }
@@ -713,7 +715,7 @@ std::expected<std::vector<uint8_t>, std::string> encodeEventStreamForEngine(
 }
 
 std::expected<std::vector<uint8_t>, std::string> buildUserContentNspcExport(NspcProject& project,
-                                                                             NspcBuildOptions options) {
+                                                                            NspcBuildOptions options) {
     auto upload = buildUserContentUpload(project, options);
     if (!upload.has_value()) {
         return std::unexpected(upload.error());

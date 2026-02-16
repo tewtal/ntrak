@@ -7,11 +7,9 @@
 
 #include <atomic>
 #include <cstdint>
-#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
-#include <vector>
 
 namespace ntrak::app {
 
@@ -31,8 +29,6 @@ struct PlaybackTrackingState {
 
 struct AppState {
     std::optional<nspc::NspcProject> project;
-    std::vector<std::uint8_t> sourceSpcData;
-    std::optional<std::filesystem::path> sourceSpcPath;
     bool flattenSubroutinesOnLoad = false;
     bool optimizeSubroutinesOnBuild = false;
     bool compactAramLayoutOnBuild = true;

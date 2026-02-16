@@ -1,4 +1,4 @@
-#include "NspcCompileShared.hpp"
+#include "ntrak/nspc/NspcCompileShared.hpp"
 
 #include <algorithm>
 #include <format>
@@ -19,8 +19,8 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
     const uint8_t instrumentEntrySize = std::clamp<uint8_t>(engine.instrumentEntryBytes, 5, 6);
     const bool isSmwV00Engine = (engine.engineVersion == "0.0");
     const auto commandMap = engine.commandMap.value_or(NspcCommandMap{});
-    const int percussionCount =
-        static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
+    const int percussionCount = static_cast<int>(commandMap.percussionEnd) -
+                                static_cast<int>(commandMap.percussionStart) + 1;
     const auto rangeEndDisplay = [](uint32_t endExclusive) -> uint16_t {
         if (endExclusive == 0) {
             return 0;
@@ -34,12 +34,14 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
         uint32_t to = 0;
         const std::vector<uint8_t>* data = nullptr;
     };
+
     std::vector<UserSampleBrrRange> userSampleBrrRanges;
     userSampleBrrRanges.reserve(project.samples().size());
 
     if (engine.instrumentHeaders != 0) {
         for (auto& instrument : project.instruments()) {
-            if (instrument.contentOrigin != NspcContentOrigin::UserProvided || instrument.id < 0 || instrument.originalAddr != 0) {
+            if (instrument.contentOrigin != NspcContentOrigin::UserProvided || instrument.id < 0 ||
+                instrument.originalAddr != 0) {
                 continue;
             }
             const uint32_t address = static_cast<uint32_t>(engine.instrumentHeaders) +
@@ -58,7 +60,8 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
 
         auto songCompile = buildSongScopedUpload(project, static_cast<int>(songIndex), songBuildOptions);
         if (!songCompile.has_value()) {
-            return std::unexpected(std::format("Failed to compile user song {:02X}: {}", songIndex, songCompile.error()));
+            return std::unexpected(
+                std::format("Failed to compile user song {:02X}: {}", songIndex, songCompile.error()));
         }
 
         hasUserContent = true;
@@ -82,8 +85,8 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
                                  static_cast<uint32_t>(instrument.id) * static_cast<uint32_t>(instrumentEntrySize);
         const uint32_t end = address + instrumentEntrySize;
         if (end > kAramSize) {
-            return std::unexpected(std::format("Instrument {:02X} table write at ${:04X} exceeds ARAM bounds", instrument.id,
-                                               static_cast<uint16_t>(address & 0xFFFFu)));
+            return std::unexpected(std::format("Instrument {:02X} table write at ${:04X} exceeds ARAM bounds",
+                                               instrument.id, static_cast<uint16_t>(address & 0xFFFFu)));
         }
 
         std::vector<uint8_t> bytes;
@@ -104,12 +107,11 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
         });
 
         if (isSmwV00Engine && engine.percussionHeaders != 0 && instrument.id >= 0 && instrument.id < percussionCount) {
-            const uint32_t percussionAddress =
-                static_cast<uint32_t>(engine.percussionHeaders) + static_cast<uint32_t>(instrument.id) * 6u;
+            const uint32_t percussionAddress = static_cast<uint32_t>(engine.percussionHeaders) +
+                                               static_cast<uint32_t>(instrument.id) * 6u;
             if (percussionAddress + 6u > kAramSize) {
-                return std::unexpected(std::format(
-                    "Percussion instrument {:02X} write at ${:04X} exceeds ARAM bounds", instrument.id,
-                    static_cast<uint16_t>(percussionAddress & 0xFFFFu)));
+                return std::unexpected(std::format("Percussion instrument {:02X} write at ${:04X} exceeds ARAM bounds",
+                                                   instrument.id, static_cast<uint16_t>(percussionAddress & 0xFFFFu)));
             }
 
             std::vector<uint8_t> percussionBytes;
@@ -143,21 +145,21 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
         if (sample.originalAddr == 0) {
             return std::unexpected(std::format("User sample {:02X} has no ARAM start address", sample.id));
         }
-        const uint32_t sampleEnd = static_cast<uint32_t>(sample.originalAddr) + static_cast<uint32_t>(sample.data.size());
+        const uint32_t sampleEnd = static_cast<uint32_t>(sample.originalAddr) +
+                                   static_cast<uint32_t>(sample.data.size());
         if (sampleEnd > kAramSize) {
-            return std::unexpected(std::format("User sample {:02X} data at ${:04X} exceeds ARAM bounds", sample.id,
-                                               sample.originalAddr));
+            return std::unexpected(
+                std::format("User sample {:02X} data at ${:04X} exceeds ARAM bounds", sample.id, sample.originalAddr));
         }
         if (engine.sampleHeaders == 0) {
             return std::unexpected("Engine config has no sample directory for user-provided samples");
         }
 
-        const uint32_t directoryAddr =
-            static_cast<uint32_t>(engine.sampleHeaders) + static_cast<uint32_t>(sample.id) * 4u;
+        const uint32_t directoryAddr = static_cast<uint32_t>(engine.sampleHeaders) +
+                                       static_cast<uint32_t>(sample.id) * 4u;
         if (directoryAddr + 4u > kAramSize) {
-            return std::unexpected(
-                std::format("Sample {:02X} directory entry at ${:04X} exceeds ARAM bounds", sample.id,
-                            static_cast<uint16_t>(directoryAddr & 0xFFFFu)));
+            return std::unexpected(std::format("Sample {:02X} directory entry at ${:04X} exceeds ARAM bounds",
+                                               sample.id, static_cast<uint16_t>(directoryAddr & 0xFFFFu)));
         }
 
         std::vector<uint8_t> sampleDirectoryBytes;

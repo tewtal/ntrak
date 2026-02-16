@@ -1,5 +1,5 @@
-#include "ntrak/nspc/NspcData.hpp"
 #include "ntrak/nspc/NspcCommandHistory.hpp"
+#include "ntrak/nspc/NspcData.hpp"
 #include "ntrak/nspc/NspcEditor.hpp"
 
 #include <gtest/gtest.h>
@@ -14,7 +14,7 @@ namespace ntrak::nspc {
 namespace {
 
 // Helper to create a track with events
-NspcEventId addTrackWithEvents(NspcSong& song, int trackId, std::vector<NspcEvent> events) {
+NspcEventId addTrackWithEvents(NspcSong& song, int trackId, const std::vector<NspcEvent>& events) {
     auto& tracks = song.tracks();
     if (static_cast<size_t>(trackId) >= tracks.size()) {
         tracks.resize(trackId + 1);
@@ -22,10 +22,11 @@ NspcEventId addTrackWithEvents(NspcSong& song, int trackId, std::vector<NspcEven
 
     NspcEventId nextId = 1;
     std::vector<NspcEventEntry> entries;
-    for (auto& event : events) {
+    entries.reserve(events.size() + 1);
+    for (const auto& event : events) {
         entries.push_back(NspcEventEntry{
             .id = nextId++,
-            .event = std::move(event),
+            .event = event,
             .originalAddr = std::nullopt,
         });
     }
@@ -114,21 +115,21 @@ std::string bytesToHex(const std::vector<uint8_t>& bytes) {
 // Helper to compare byte vectors and report differences
 void compareBytes(const std::string& context, const std::vector<uint8_t>& before, const std::vector<uint8_t>& after,
                   const std::vector<uint8_t>& expected) {
-    std::cout << "\n=== " << context << " ===" << std::endl;
-    std::cout << "Before:   " << bytesToHex(before) << std::endl;
-    std::cout << "After:    " << bytesToHex(after) << std::endl;
-    std::cout << "Expected: " << bytesToHex(expected) << std::endl;
+    std::cout << "\n=== " << context << " ===\n";
+    std::cout << "Before:   " << bytesToHex(before) << '\n';
+    std::cout << "After:    " << bytesToHex(after) << '\n';
+    std::cout << "Expected: " << bytesToHex(expected) << '\n';
 
     if (after != expected) {
-        std::cout << "MISMATCH DETECTED!" << std::endl;
+        std::cout << "MISMATCH DETECTED!\n";
         for (size_t i = 0; i < std::max(after.size(), expected.size()); ++i) {
             if (i >= after.size()) {
-                std::cout << "  [" << i << "] missing, expected " << std::format("{:02X}", expected[i]) << std::endl;
+                std::cout << "  [" << i << "] missing, expected " << std::format("{:02X}", expected[i]) << '\n';
             } else if (i >= expected.size()) {
-                std::cout << "  [" << i << "] extra byte " << std::format("{:02X}", after[i]) << std::endl;
+                std::cout << "  [" << i << "] extra byte " << std::format("{:02X}", after[i]) << '\n';
             } else if (after[i] != expected[i]) {
                 std::cout << "  [" << i << "] got " << std::format("{:02X}", after[i]) << ", expected "
-                          << std::format("{:02X}", expected[i]) << std::endl;
+                          << std::format("{:02X}", expected[i]) << '\n';
             }
         }
     }
@@ -304,8 +305,8 @@ TEST(NspcEditorTest, RemoveTickAtRow_DeletesRowAndPullsLaterRowsUp) {
 
     // Row 0: Note C (len 4), Row 4: Tie (len 1), Row 5: Note D (len 4)
     addTrackWithEvents(song, 0,
-                       {Duration{.ticks = 4}, Note{.pitch = 24}, Duration{.ticks = 1}, Tie{},
-                        Duration{.ticks = 4}, Note{.pitch = 26}});
+                       {Duration{.ticks = 4}, Note{.pitch = 24}, Duration{.ticks = 1}, Tie{}, Duration{.ticks = 4},
+                        Note{.pitch = 26}});
     addPattern(song, 0, 0, 0);
 
     NspcEditorLocation loc{.patternId = 0, .channel = 0, .row = 4};
@@ -324,11 +325,8 @@ TEST(NspcEditorTest, RemoveTickAtRow_RemovesCommandsAnchoredOnDeletedRow) {
 
     // Row 0: Note C (len 4), Row 4: Instrument cmd + Note D (len 4)
     addTrackWithEvents(song, 0,
-                       {Duration{.ticks = 4},
-                        Note{.pitch = 24},
-                        Vcmd{VcmdInst{.instrumentIndex = 5}},
-                        Duration{.ticks = 4},
-                        Note{.pitch = 26}});
+                       {Duration{.ticks = 4}, Note{.pitch = 24}, Vcmd{VcmdInst{.instrumentIndex = 5}},
+                        Duration{.ticks = 4}, Note{.pitch = 26}});
     addPattern(song, 0, 0, 0);
 
     NspcEditorLocation loc{.patternId = 0, .channel = 0, .row = 4};
@@ -431,7 +429,6 @@ TEST(NspcEditorTest, SetInstrument_UnassignedChannelExtendsToPatternEnd) {
 
     EXPECT_TRUE(result) << "setInstrumentAtRow should return true";
     EXPECT_EQ(after, expected) << "Unassigned channel track should be extended to pattern baseline";
-
 }
 
 //=============================================================================
@@ -571,15 +568,16 @@ TEST(NspcEditorTest, SetRowEvent_PreserveTiming) {
 //=============================================================================
 
 // Helper to add a subroutine with events
-NspcEventId addSubroutineWithEvents(NspcSong& song, int subroutineId, std::vector<NspcEvent> events) {
+NspcEventId addSubroutineWithEvents(NspcSong& song, int subroutineId, const std::vector<NspcEvent>& events) {
     auto& subroutines = song.subroutines();
     if (static_cast<size_t>(subroutineId) >= subroutines.size()) {
         subroutines.resize(subroutineId + 1);
     }
 
-    NspcEventId nextId = 1000 + static_cast<NspcEventId>(subroutineId) * 100;
+    NspcEventId nextId = 1000 + (static_cast<NspcEventId>(subroutineId) * 100);
     std::vector<NspcEventEntry> entries;
-    for (auto& event : events) {
+    entries.reserve(events.size() + 1);
+    for (const auto& event : events) {
         entries.push_back(NspcEventEntry{
             .id = nextId++,
             .event = event,
@@ -595,7 +593,7 @@ NspcEventId addSubroutineWithEvents(NspcSong& song, int subroutineId, std::vecto
     subroutines[subroutineId] = NspcSubroutine{
         .id = subroutineId,
         .events = std::move(entries),
-        .originalAddr = static_cast<uint16_t>(0x3000 + subroutineId * 0x100),
+        .originalAddr = static_cast<uint16_t>(0x3000 + (subroutineId * 0x100)),
     };
 
     return nextId;
@@ -632,7 +630,7 @@ NspcEventId addTrackWithSubroutineCall(NspcSong& song, int trackId, int subrouti
         tracks.resize(trackId + 1);
     }
 
-    NspcEventId nextId = static_cast<NspcEventId>(100 + trackId * 10);
+    NspcEventId nextId = static_cast<NspcEventId>(100) + (static_cast<NspcEventId>(trackId) * 10);
     std::vector<NspcEventEntry> entries;
 
     // Add subroutine call (using VcmdSubroutineCall which is how flattening resolves subroutines)
@@ -652,7 +650,7 @@ NspcEventId addTrackWithSubroutineCall(NspcSong& song, int trackId, int subrouti
     tracks[trackId] = NspcTrack{
         .id = trackId,
         .events = std::move(entries),
-        .originalAddr = static_cast<uint16_t>(0x1000 + trackId * 0x100),
+        .originalAddr = static_cast<uint16_t>(0x1000 + (trackId * 0x100)),
     };
 
     return nextId;
@@ -956,13 +954,13 @@ TEST(NspcEditorTest, MultiChannel_Independence) {
 
     // Verify channel 0 changed
     std::vector<uint8_t> ch0 = encodeTrack(song.tracks()[0]);
-    std::vector<uint8_t> ch0_expected = {0x08, 0x9A, 0x00};
-    EXPECT_EQ(ch0, ch0_expected) << "Channel 0 should be modified";
+    std::vector<uint8_t> ch0Expected = {0x08, 0x9A, 0x00};
+    EXPECT_EQ(ch0, ch0Expected) << "Channel 0 should be modified";
 
     // Verify channel 1 unchanged
     std::vector<uint8_t> ch1 = encodeTrack(song.tracks()[1]);
-    std::vector<uint8_t> ch1_expected = {0x08, 0xA4, 0x00};
-    EXPECT_EQ(ch1, ch1_expected) << "Channel 1 should be unchanged";
+    std::vector<uint8_t> ch1Expected = {0x08, 0xA4, 0x00};
+    EXPECT_EQ(ch1, ch1Expected) << "Channel 1 should be unchanged";
 }
 
 //=============================================================================
@@ -982,7 +980,7 @@ TEST(NspcEditorTest, AddEffectAtRow_AppendsAfterExistingEffects) {
     EXPECT_TRUE(result);
 
     const auto& events = song.tracks()[0].events;
-    ASSERT_GE(events.size(), 5u);
+    ASSERT_GE(events.size(), 5U);
 
     const Vcmd* first = eventAsVcmd(events[0]);
     ASSERT_NE(first, nullptr);
@@ -1013,7 +1011,7 @@ TEST(NspcEditorTest, AddEffectAtRow_CreatesFirstEffect) {
     EXPECT_TRUE(result);
 
     const auto& events = song.tracks()[0].events;
-    ASSERT_GE(events.size(), 4u);
+    ASSERT_GE(events.size(), 4U);
 
     const Vcmd* first = eventAsVcmd(events[0]);
     ASSERT_NE(first, nullptr);
@@ -1043,7 +1041,7 @@ TEST(NspcEditorTest, ClearEffectsAtRow_RemovesAllRowEffects) {
     EXPECT_TRUE(result);
 
     const auto& events = song.tracks()[0].events;
-    ASSERT_GE(events.size(), 3u);
+    ASSERT_GE(events.size(), 3U);
     EXPECT_TRUE(std::holds_alternative<Duration>(events[0].event));
     EXPECT_TRUE(std::holds_alternative<Note>(events[1].event));
 }
@@ -1060,11 +1058,10 @@ TEST(NspcEditorTest, ClearEffectsAtRow_PreservesSubroutineCall) {
     EXPECT_FALSE(result) << "Should not treat subroutine call as an effect to clear";
 
     const auto& events = song.tracks()[0].events;
-    ASSERT_GE(events.size(), 1u);
+    ASSERT_GE(events.size(), 1U);
     const auto* vcmd = eventAsVcmd(events[0]);
     ASSERT_NE(vcmd, nullptr);
-    EXPECT_TRUE(std::holds_alternative<VcmdSubroutineCall>(vcmd->vcmd))
-        << "Subroutine call should be preserved";
+    EXPECT_TRUE(std::holds_alternative<VcmdSubroutineCall>(vcmd->vcmd)) << "Subroutine call should be preserved";
 }
 
 TEST(NspcEditorTest, ClearEffectsAtRow_RemoveSubroutineCallWhenRequested) {
@@ -1079,7 +1076,7 @@ TEST(NspcEditorTest, ClearEffectsAtRow_RemoveSubroutineCallWhenRequested) {
     EXPECT_TRUE(result);
 
     const auto& events = song.tracks()[0].events;
-    ASSERT_GE(events.size(), 1u);
+    ASSERT_GE(events.size(), 1U);
     EXPECT_TRUE(std::holds_alternative<End>(events[0].event));
 }
 
@@ -1102,7 +1099,7 @@ TEST(NspcEditorTest, SetEffectsCommand_PreservesSubroutineCall) {
     bool foundSubroutineCall = false;
     for (const auto& entry : events) {
         const auto* vcmd = eventAsVcmd(entry);
-        if (!vcmd) {
+        if (vcmd == nullptr) {
             continue;
         }
         if (std::holds_alternative<VcmdPanFade>(vcmd->vcmd)) {
@@ -1138,7 +1135,7 @@ TEST(NspcEditorTest, SetEffectsCommand_CanReplaceSubroutineCallWhenRequested) {
     bool foundSubroutineCall = false;
     for (const auto& entry : events) {
         const auto* vcmd = eventAsVcmd(entry);
-        if (!vcmd) {
+        if (vcmd == nullptr) {
             continue;
         }
         foundPanFade = foundPanFade || std::holds_alternative<VcmdPanFade>(vcmd->vcmd);
@@ -1164,11 +1161,11 @@ TEST(NspcEditorTest, CreateSubroutineFromRowRange_ExtractsTrackSlice) {
     const bool changed = editor.createSubroutineFromRowRange(song, loc, 0, 4);
     EXPECT_TRUE(changed);
 
-    ASSERT_EQ(song.subroutines().size(), 1u);
+    ASSERT_EQ(song.subroutines().size(), 1U);
     EXPECT_EQ(song.subroutines()[0].id, 0);
 
     const auto& trackEvents = song.tracks()[0].events;
-    ASSERT_GE(trackEvents.size(), 2u);
+    ASSERT_GE(trackEvents.size(), 2U);
     const auto* callVcmd = eventAsVcmd(trackEvents[0]);
     ASSERT_NE(callVcmd, nullptr);
     ASSERT_TRUE(std::holds_alternative<VcmdSubroutineCall>(callVcmd->vcmd));
@@ -1178,7 +1175,7 @@ TEST(NspcEditorTest, CreateSubroutineFromRowRange_ExtractsTrackSlice) {
     EXPECT_TRUE(std::holds_alternative<End>(trackEvents[1].event));
 
     const auto& subEvents = song.subroutines()[0].events;
-    ASSERT_GE(subEvents.size(), 5u);
+    ASSERT_GE(subEvents.size(), 5U);
     EXPECT_TRUE(std::holds_alternative<Duration>(subEvents[0].event));
     EXPECT_TRUE(std::holds_alternative<Note>(subEvents[1].event));
     EXPECT_TRUE(std::holds_alternative<Duration>(subEvents[2].event));
@@ -1195,21 +1192,23 @@ TEST(NspcEditorTest, FlattenSubroutineOnChannel_InlinesCallsForTargetTrack) {
     tracks.resize(1);
     tracks[0] = NspcTrack{
         .id = 0,
-        .events = {
-            NspcEventEntry{.id = 1,
-                           .event = Vcmd{VcmdSubroutineCall{.subroutineId = 0, .originalAddr = 0x3000, .count = 2}},
-                           .originalAddr = std::nullopt},
-            NspcEventEntry{.id = 2, .event = End{}, .originalAddr = std::nullopt},
-        },
+        .events =
+            {
+                NspcEventEntry{.id = 1,
+                               .event = Vcmd{VcmdSubroutineCall{.subroutineId = 0, .originalAddr = 0x3000, .count = 2}},
+                               .originalAddr = std::nullopt},
+                NspcEventEntry{.id = 2, .event = End{}, .originalAddr = std::nullopt},
+            },
         .originalAddr = 0x1000,
     };
     addPattern(song, 0, 0, 0);
 
-    const bool changed = editor.flattenSubroutineOnChannel(song, NspcEditorLocation{.patternId = 0, .channel = 0, .row = 0}, 0);
+    const bool changed =
+        editor.flattenSubroutineOnChannel(song, NspcEditorLocation{.patternId = 0, .channel = 0, .row = 0}, 0);
     EXPECT_TRUE(changed);
 
     const auto& events = song.tracks()[0].events;
-    ASSERT_GE(events.size(), 5u);
+    ASSERT_GE(events.size(), 5U);
     EXPECT_TRUE(std::holds_alternative<Duration>(events[0].event));
     EXPECT_TRUE(std::holds_alternative<Note>(events[1].event));
     EXPECT_TRUE(std::holds_alternative<Duration>(events[2].event));
@@ -1228,39 +1227,41 @@ TEST(NspcEditorTest, DeleteSubroutine_FlattensTargetAndReindexesRemainingCalls) 
     tracks.resize(2);
     tracks[0] = NspcTrack{
         .id = 0,
-        .events = {
-            NspcEventEntry{.id = 1,
-                           .event = Vcmd{VcmdSubroutineCall{.subroutineId = 0, .originalAddr = 0x3000, .count = 1}},
-                           .originalAddr = std::nullopt},
-            NspcEventEntry{.id = 2, .event = End{}, .originalAddr = std::nullopt},
-        },
+        .events =
+            {
+                NspcEventEntry{.id = 1,
+                               .event = Vcmd{VcmdSubroutineCall{.subroutineId = 0, .originalAddr = 0x3000, .count = 1}},
+                               .originalAddr = std::nullopt},
+                NspcEventEntry{.id = 2, .event = End{}, .originalAddr = std::nullopt},
+            },
         .originalAddr = 0x1000,
     };
     tracks[1] = NspcTrack{
         .id = 1,
-        .events = {
-            NspcEventEntry{.id = 3,
-                           .event = Vcmd{VcmdSubroutineCall{.subroutineId = 1, .originalAddr = 0x3100, .count = 1}},
-                           .originalAddr = std::nullopt},
-            NspcEventEntry{.id = 4, .event = End{}, .originalAddr = std::nullopt},
-        },
+        .events =
+            {
+                NspcEventEntry{.id = 3,
+                               .event = Vcmd{VcmdSubroutineCall{.subroutineId = 1, .originalAddr = 0x3100, .count = 1}},
+                               .originalAddr = std::nullopt},
+                NspcEventEntry{.id = 4, .event = End{}, .originalAddr = std::nullopt},
+            },
         .originalAddr = 0x1100,
     };
 
     const bool changed = editor.deleteSubroutine(song, 0);
     EXPECT_TRUE(changed);
 
-    ASSERT_EQ(song.subroutines().size(), 1u);
+    ASSERT_EQ(song.subroutines().size(), 1U);
     EXPECT_EQ(song.subroutines()[0].id, 0);
 
     const auto& track0Events = song.tracks()[0].events;
-    ASSERT_GE(track0Events.size(), 3u);
+    ASSERT_GE(track0Events.size(), 3U);
     EXPECT_TRUE(std::holds_alternative<Duration>(track0Events[0].event));
     EXPECT_TRUE(std::holds_alternative<Note>(track0Events[1].event));
     EXPECT_TRUE(std::holds_alternative<End>(track0Events[2].event));
 
     const auto& track1Events = song.tracks()[1].events;
-    ASSERT_GE(track1Events.size(), 2u);
+    ASSERT_GE(track1Events.size(), 2U);
     const auto* callVcmd = eventAsVcmd(track1Events[0]);
     ASSERT_NE(callVcmd, nullptr);
     ASSERT_TRUE(std::holds_alternative<VcmdSubroutineCall>(callVcmd->vcmd));

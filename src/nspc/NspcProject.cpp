@@ -206,8 +206,8 @@ void collectStaticAramRegions(const NspcEngineConfig& engineConfig, std::span<co
 
     if (engineConfig.sampleHeaders != 0) {
         for (const auto& sample : samples) {
-            const uint32_t headerFrom =
-                static_cast<uint32_t>(engineConfig.sampleHeaders) + static_cast<uint32_t>(sample.id) * 4u;
+            const uint32_t headerFrom = static_cast<uint32_t>(engineConfig.sampleHeaders) +
+                                        static_cast<uint32_t>(sample.id) * 4u;
             addUsageRegion(regions, NspcAramRegionKind::SampleDirectory, headerFrom, headerFrom + 4u,
                            std::format("Sample {:02X} Header", sample.id), -1, sample.id);
         }
@@ -253,15 +253,16 @@ uint16_t resolveSequenceAddress(const NspcEngineConfig& engineConfig, emulation:
     if (engineConfig.songIndexPointers == 0) {
         return 0;
     }
-    const uint32_t pointerAddr =
-        static_cast<uint32_t>(engineConfig.songIndexPointers) + static_cast<uint32_t>(songId) * 2u;
+    const uint32_t pointerAddr = static_cast<uint32_t>(engineConfig.songIndexPointers) +
+                                 static_cast<uint32_t>(songId) * 2u;
     if (pointerAddr + 1u >= kAramSize) {
         return 0;
     }
     return aramView.read16(static_cast<uint16_t>(pointerAddr));
 }
 
-void collectSongAramRegions(const NspcProject& project, emulation::AramView aramView, std::vector<NspcAramRegion>& regions) {
+void collectSongAramRegions(const NspcProject& project, emulation::AramView aramView,
+                            std::vector<NspcAramRegion>& regions) {
     const auto& engineConfig = project.engineConfig();
     for (const auto& song : project.songs()) {
         const int songId = song.songId();
@@ -286,22 +287,21 @@ void collectSongAramRegions(const NspcProject& project, emulation::AramView aram
             if (patternAddr == 0) {
                 continue;
             }
-            addUsageRegion(regions, NspcAramRegionKind::PatternTable, patternAddr, static_cast<uint32_t>(patternAddr) + 16u,
+            addUsageRegion(regions, NspcAramRegionKind::PatternTable, patternAddr,
+                           static_cast<uint32_t>(patternAddr) + 16u,
                            std::format("Song {:02X} Pattern {:02X}", songId, pattern.id), songId, pattern.id);
         }
 
         for (const auto& track : song.tracks()) {
-            const uint16_t trackAddr = (layout != nullptr)
-                                           ? resolveLayoutAddress(layout, track.id, track.originalAddr,
-                                                                  layout->trackAddrById)
-                                           : track.originalAddr;
+            const uint16_t trackAddr = (layout != nullptr) ? resolveLayoutAddress(layout, track.id, track.originalAddr,
+                                                                                  layout->trackAddrById)
+                                                           : track.originalAddr;
             if (trackAddr == 0) {
                 continue;
             }
-            const uint32_t size = (layout != nullptr)
-                                      ? resolveLayoutSize(layout, track.id, streamSize(track.events),
-                                                          layout->trackSizeById)
-                                      : streamSize(track.events);
+            const uint32_t size = (layout != nullptr) ? resolveLayoutSize(layout, track.id, streamSize(track.events),
+                                                                          layout->trackSizeById)
+                                                      : streamSize(track.events);
             addUsageRegion(regions, NspcAramRegionKind::TrackData, trackAddr, static_cast<uint32_t>(trackAddr) + size,
                            std::format("Song {:02X} Track {:02X}", songId, track.id), songId, track.id);
         }
@@ -341,7 +341,8 @@ void collectSongAramRegions(const NspcProject& project, emulation::AramView aram
     }
 }
 
-void tallyAramOwnership(const std::array<NspcAramRegionKind, NspcAramUsage::kTotalAramBytes>& ownership, NspcAramUsage& usage) {
+void tallyAramOwnership(const std::array<NspcAramRegionKind, NspcAramUsage::kTotalAramBytes>& ownership,
+                        NspcAramUsage& usage) {
     for (const auto kind : ownership) {
         switch (kind) {
         case NspcAramRegionKind::Free:
@@ -464,7 +465,7 @@ NspcContentOrigin defaultContentOrigin(int id, const std::vector<int>& defaultEn
         return NspcContentOrigin::EngineProvided;
     }
     return containsId(defaultEngineProvidedIds, id) ? NspcContentOrigin::EngineProvided
-                                                     : NspcContentOrigin::UserProvided;
+                                                    : NspcContentOrigin::UserProvided;
 }
 
 bool readAramWordSafe(emulation::AramView aram, uint32_t address, uint16_t& outValue) {
@@ -510,11 +511,12 @@ void applyPercussionTableNotes(std::vector<NspcInstrument>& instruments, emulati
         return;
     }
 
-
-    const auto percussionStartInstId = std::clamp((config.percussionHeaders - config.instrumentHeaders) / 5u, 0u, kMaxInstruments);
+    const auto percussionStartInstId = std::clamp((config.percussionHeaders - config.instrumentHeaders) / 5u, 0u,
+                                                  kMaxInstruments);
 
     const auto commandMap = config.commandMap.value_or(NspcCommandMap{});
-    const int percussionCount = static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
+    const int percussionCount = static_cast<int>(commandMap.percussionEnd) -
+                                static_cast<int>(commandMap.percussionStart) + 1;
     if (percussionCount <= 0) {
         return;
     }
@@ -532,8 +534,8 @@ void applyPercussionTableNotes(std::vector<NspcInstrument>& instruments, emulati
         const uint8_t basePitch = aramView.read(static_cast<uint16_t>(entryAddr + 4u));
         const uint8_t note = aramView.read(static_cast<uint16_t>(entryAddr + 5u));
 
-        const bool allFF =
-            (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF && basePitch == 0xFF && note == 0xFF);
+        const bool allFF = (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF &&
+                            basePitch == 0xFF && note == 0xFF);
         const bool allZero = (sampleIndex == 0 && adsr1 == 0 && adsr2 == 0 && gain == 0 && basePitch == 0 && note == 0);
         if (allFF || allZero) {
             continue;
@@ -556,7 +558,7 @@ void applyPercussionTableNotes(std::vector<NspcInstrument>& instruments, emulati
         inst.percussionNote = note;
         inst.originalAddr = static_cast<uint16_t>(entryAddr);
         inst.contentOrigin = defaultContentOrigin(inst.id, config.defaultEngineProvidedInstrumentIds,
-                                                    config.hasDefaultEngineProvidedInstruments);
+                                                  config.hasDefaultEngineProvidedInstruments);
 
         instruments.push_back(std::move(inst));
     }
@@ -590,9 +592,9 @@ std::unordered_set<int> collectReferencedSampleIdsFromInstrumentTable(emulation:
             break;
         }
 
-        const bool allFF =
-            (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF && basePitch == 0xFF) &&
-            (entrySize < 6 || fracPitch == 0xFF);
+        const bool allFF = (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF &&
+                            basePitch == 0xFF) &&
+                           (entrySize < 6 || fracPitch == 0xFF);
         const bool allZero = (sampleIndex == 0 && adsr1 == 0 && adsr2 == 0 && gain == 0 && basePitch == 0) &&
                              (entrySize < 6 || fracPitch == 0);
         if (allFF || allZero) {
@@ -789,8 +791,8 @@ NspcProject::NspcProject(NspcEngineConfig config, std::array<std::uint8_t, 0x100
     normalizeIds(engineConfig_.defaultEngineProvidedSampleIds);
 
     parseSamples();
-    parseInstruments();
     parseSongs();
+    parseInstruments();
     rebuildAramUsage();
 }
 
@@ -835,9 +837,9 @@ void NspcProject::parseInstruments() {
         const bool sampleExists = std::any_of(samples_.begin(), samples_.end(),
                                               [sampleId](const BrrSample& sample) { return sample.id == sampleId; });
 
-        const bool allFF =
-            (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF && basePitch == 0xFF) &&
-            (entrySize < 6 || fracPitch == 0xFF);
+        const bool allFF = (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF &&
+                            basePitch == 0xFF) &&
+                           (entrySize < 6 || fracPitch == 0xFF);
         const bool allZero = (sampleIndex == 0 && adsr1 == 0 && adsr2 == 0 && gain == 0 && basePitch == 0) &&
                              (entrySize < 6 || fracPitch == 0);
 
@@ -867,6 +869,87 @@ void NspcProject::parseInstruments() {
     }
 
     applyPercussionTableNotes(instruments_, aramView, engineConfig_);
+
+    // Addmusick tweak: scan for extended instrument entries placed after the sequence data of
+    // each song, beyond the normal instrument table.
+    if (engineConfig_.engineVariant == "addmusick") {
+        parseExtendedInstruments(aramView, entrySize);
+    }
+}
+
+void NspcProject::parseExtendedInstruments(emulation::AramView aramView, uint8_t entrySize) {
+    // Addmusick places extra instrument entries after the last song's sequence data.
+    // Scan from each song's sequenceEndAddr for additional instrument table entries.
+
+    std::unordered_set<int> existingInstrumentIds;
+    existingInstrumentIds.reserve(instruments_.size());
+    for (const auto& inst : instruments_) {
+        existingInstrumentIds.insert(inst.id);
+    }
+
+    int nextExtendedId = 0;
+    if (!instruments_.empty()) {
+        nextExtendedId = instruments_.back().id + 1;
+    }
+
+    for (const auto& song : songs_) {
+        const uint16_t seqEnd = song.sequenceEndAddr();
+        if (seqEnd == 0) {
+            continue;
+        }
+
+        uint32_t addr = seqEnd;
+        constexpr uint32_t kMaxExtendedInstruments = 32U;
+
+        for (uint32_t i = 0; i < kMaxExtendedInstruments && addr + entrySize <= 0x10000U; ++i, addr += entrySize) {
+            const uint8_t sampleIndex = aramView.read(static_cast<uint16_t>(addr));
+            const uint8_t adsr1 = aramView.read(static_cast<uint16_t>(addr + 1U));
+            const uint8_t adsr2 = aramView.read(static_cast<uint16_t>(addr + 2U));
+            const uint8_t gain = aramView.read(static_cast<uint16_t>(addr + 3U));
+            const uint8_t basePitch = aramView.read(static_cast<uint16_t>(addr + 4U));
+            uint8_t fracPitch = 0;
+            if (entrySize >= 6) {
+                fracPitch = aramView.read(static_cast<uint16_t>(addr + 5U));
+            }
+
+            const bool allFF = (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF &&
+                                basePitch == 0xFF) &&
+                               (entrySize < 6 || fracPitch == 0xFF);
+            const bool allZero = (sampleIndex == 0 && adsr1 == 0 && adsr2 == 0 && gain == 0 && basePitch == 0) &&
+                                 (entrySize < 6 || fracPitch == 0);
+            if (allFF || allZero) {
+                break;
+            }
+
+            const uint8_t sampleId = sampleIndex & 0x7FU;
+            const bool sampleExists =
+                std::any_of(samples_.begin(), samples_.end(),
+                            [sampleId](const BrrSample& sample) { return sample.id == sampleId; });
+            if (!sampleExists) {
+                break;
+            }
+
+            const int instId = nextExtendedId++;
+            if (existingInstrumentIds.contains(instId)) {
+                continue;
+            }
+
+            NspcInstrument inst{};
+            inst.id = instId;
+            inst.sampleIndex = sampleIndex & 0x7FU;
+            inst.adsr1 = adsr1;
+            inst.adsr2 = adsr2;
+            inst.gain = gain;
+            inst.basePitchMult = basePitch;
+            inst.fracPitchMult = fracPitch;
+            inst.percussionNote = 0;
+            inst.originalAddr = static_cast<uint16_t>(addr);
+            inst.contentOrigin = NspcContentOrigin::UserProvided;
+
+            instruments_.push_back(std::move(inst));
+            existingInstrumentIds.insert(instId);
+        }
+    }
 }
 
 void NspcProject::parseSamples() {
@@ -885,6 +968,7 @@ void NspcProject::parseSamples() {
         uint16_t sampleStart = 0;
         uint16_t loopPoint = 0;
     };
+
     std::vector<SampleDirectoryEntry> directoryEntries;
     directoryEntries.reserve(kMaxSampleDirectoryEntries);
     std::vector<uint16_t> sampleStarts;
@@ -1015,8 +1099,8 @@ void NspcProject::parseSongs() {
         }
 
         if (!isLikelySongPointer(aramView, seqPtr, commandMap, engineConfig_)) {
-            common::logInfo(
-                std::format("Stopped parsing songs at index {:02X}: pointer ${:04X} is not a valid N-SPC song", i, seqPtr));
+            common::logInfo(std::format(
+                "Stopped parsing songs at index {:02X}: pointer ${:04X} is not a valid N-SPC song", i, seqPtr));
             break;
         }
 
@@ -1078,8 +1162,9 @@ bool NspcProject::setSongContentOrigin(size_t songIndex, NspcContentOrigin origi
 }
 
 bool NspcProject::setInstrumentContentOrigin(int instrumentId, NspcContentOrigin origin) {
-    const auto it = std::find_if(instruments_.begin(), instruments_.end(),
-                                 [instrumentId](const NspcInstrument& instrument) { return instrument.id == instrumentId; });
+    const auto it =
+        std::find_if(instruments_.begin(), instruments_.end(),
+                     [instrumentId](const NspcInstrument& instrument) { return instrument.id == instrumentId; });
     if (it == instruments_.end()) {
         return false;
     }
@@ -1098,10 +1183,9 @@ bool NspcProject::setSampleContentOrigin(int sampleId, NspcContentOrigin origin)
 }
 
 bool NspcProject::setEngineExtensionEnabled(std::string_view extensionName, bool enabled) {
-    auto it = std::find_if(engineConfig_.extensions.begin(), engineConfig_.extensions.end(),
-                           [extensionName](const NspcEngineExtension& extension) {
-                               return extension.name == extensionName;
-                           });
+    auto it =
+        std::find_if(engineConfig_.extensions.begin(), engineConfig_.extensions.end(),
+                     [extensionName](const NspcEngineExtension& extension) { return extension.name == extensionName; });
     if (it == engineConfig_.extensions.end()) {
         return false;
     }
@@ -1110,10 +1194,9 @@ bool NspcProject::setEngineExtensionEnabled(std::string_view extensionName, bool
 }
 
 bool NspcProject::isEngineExtensionEnabled(std::string_view extensionName) const {
-    const auto it = std::find_if(engineConfig_.extensions.begin(), engineConfig_.extensions.end(),
-                                 [extensionName](const NspcEngineExtension& extension) {
-                                     return extension.name == extensionName;
-                                 });
+    const auto it =
+        std::find_if(engineConfig_.extensions.begin(), engineConfig_.extensions.end(),
+                     [extensionName](const NspcEngineExtension& extension) { return extension.name == extensionName; });
     if (it == engineConfig_.extensions.end()) {
         return false;
     }
@@ -1180,6 +1263,28 @@ void NspcProject::rebuildAramUsage() {
     usage.regions = std::move(regions);
 
     aramUsage_ = std::move(usage);
+}
+
+void NspcProject::syncAramToSpcData() {
+    constexpr size_t kSpcHeaderSize = 0x100;
+    if (sourceSpcData_.size() < kSpcHeaderSize + kAramSize) {
+        return;
+    }
+    const auto aramAll = aram().all();
+    std::copy(aramAll.begin(), aramAll.end(), sourceSpcData_.begin() + static_cast<std::ptrdiff_t>(kSpcHeaderSize));
+}
+
+void NspcProject::syncAramRangeToSpcData(uint16_t addr, size_t size) {
+    constexpr size_t kSpcHeaderSize = 0x100;
+    if (size == 0 || static_cast<uint32_t>(addr) + static_cast<uint32_t>(size) > kAramSize) {
+        return;
+    }
+    if (sourceSpcData_.size() < kSpcHeaderSize + kAramSize) {
+        return;
+    }
+    const auto src = aram().bytes(addr, size);
+    auto dstIt = sourceSpcData_.begin() + static_cast<std::ptrdiff_t>(kSpcHeaderSize + static_cast<size_t>(addr));
+    std::copy(src.begin(), src.end(), dstIt);
 }
 
 }  // namespace ntrak::nspc

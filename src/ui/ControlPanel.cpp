@@ -58,8 +58,8 @@ struct PlaybackSetupState {
 [[nodiscard]] std::unordered_set<uint8_t> collectLegatoExtensionIds(const nspc::NspcEngineConfig& engineConfig) {
     std::unordered_set<uint8_t> ids;
     for (const auto& extension : engineConfig.extensions) {
-        const bool extensionLooksLegato =
-            containsIgnoreCase(extension.name, "legato") || containsIgnoreCase(extension.description, "legato");
+        const bool extensionLooksLegato = containsIgnoreCase(extension.name, "legato") ||
+                                          containsIgnoreCase(extension.description, "legato");
         for (const auto& vcmd : extension.vcmds) {
             if (!extensionLooksLegato && !containsIgnoreCase(vcmd.name, "legato") &&
                 !containsIgnoreCase(vcmd.description, "legato")) {
@@ -129,10 +129,9 @@ void preserveSelectionFromPlayback(app::AppState& appState) {
 
     std::optional<int> resolvedPattern = patternIdFromSequenceRow(song, liveRow);
     if (!resolvedPattern.has_value() && livePattern >= 0) {
-        const bool patternExists = std::any_of(song.patterns().begin(), song.patterns().end(),
-                                               [livePattern](const nspc::NspcPattern& pattern) {
-                                                   return pattern.id == livePattern;
-                                               });
+        const bool patternExists =
+            std::any_of(song.patterns().begin(), song.patterns().end(),
+                        [livePattern](const nspc::NspcPattern& pattern) { return pattern.id == livePattern; });
         if (patternExists) {
             resolvedPattern = livePattern;
         }
@@ -184,7 +183,8 @@ SequenceAdvanceResult advanceSequenceRowFromPatternTrigger(const std::vector<nsp
             return SequenceAdvanceResult{.row = nextRow, .reachedEnd = false};
         }
         if (const auto* alwaysJump = std::get_if<nspc::AlwaysJump>(&op)) {
-            if (const auto target = resolveSequenceTargetIndex(alwaysJump->target, sequence.size()); target.has_value()) {
+            if (const auto target = resolveSequenceTargetIndex(alwaysJump->target, sequence.size());
+                target.has_value()) {
                 nextRow = *target;
             } else {
                 ++nextRow;
@@ -538,8 +538,8 @@ PlaybackSetupState collectPlaybackSetupState(const nspc::NspcSong& song, int seq
 
 nspc::NspcPattern* findPatternById(nspc::NspcSong& song, int patternId) {
     auto& patterns = song.patterns();
-    const auto it =
-        std::find_if(patterns.begin(), patterns.end(), [patternId](const nspc::NspcPattern& p) { return p.id == patternId; });
+    const auto it = std::find_if(patterns.begin(), patterns.end(),
+                                 [patternId](const nspc::NspcPattern& p) { return p.id == patternId; });
     if (it == patterns.end()) {
         return nullptr;
     }
@@ -548,7 +548,8 @@ nspc::NspcPattern* findPatternById(nspc::NspcSong& song, int patternId) {
 
 nspc::NspcTrack* findTrackById(nspc::NspcSong& song, int trackId) {
     auto& tracks = song.tracks();
-    const auto it = std::find_if(tracks.begin(), tracks.end(), [trackId](const nspc::NspcTrack& t) { return t.id == trackId; });
+    const auto it = std::find_if(tracks.begin(), tracks.end(),
+                                 [trackId](const nspc::NspcTrack& t) { return t.id == trackId; });
     if (it == tracks.end()) {
         return nullptr;
     }
@@ -827,8 +828,8 @@ std::expected<void, std::string> injectPlaybackSetupIntoPattern(nspc::NspcSong& 
         const auto setupDuration = channelDurations[static_cast<size_t>(ch)];
         const auto setupQv = setup.channelQv[static_cast<size_t>(ch)];
         const bool setupHasQv = setupQv.has_value() || (setupDuration.has_value() && durationHasQv(*setupDuration));
-        const uint8_t fallbackQv =
-            setupQv.value_or(setupHasQv ? durationQvByte(*setupDuration) : static_cast<uint8_t>(0x7F));
+        const uint8_t fallbackQv = setupQv.value_or(setupHasQv ? durationQvByte(*setupDuration)
+                                                               : static_cast<uint8_t>(0x7F));
 
         if (const auto durationIndex = firstDurationBeforeTimedEventIndex(*track); durationIndex.has_value()) {
             auto* firstDuration = std::get_if<nspc::Duration>(&track->events[*durationIndex].event);
@@ -859,7 +860,7 @@ std::expected<void, std::string> injectPlaybackSetupIntoPattern(nspc::NspcSong& 
 }
 
 std::vector<nspc::NspcSequenceOp> buildPlayFromSequence(const std::vector<nspc::NspcSequenceOp>& sequence,
-                                                         int sequenceStartRow) {
+                                                        int sequenceStartRow) {
     std::vector<nspc::NspcSequenceOp> rebuilt;
     rebuilt.reserve(sequence.size() + 1);
     // Use a one-shot jump at row 0 so "Play From Pattern" is not dependent on fast-forward state.
@@ -873,28 +874,28 @@ std::vector<nspc::NspcSequenceOp> buildPlayFromSequence(const std::vector<nspc::
     });
 
     for (const auto& op : sequence) {
-        rebuilt.push_back(std::visit(
-            nspc::overloaded{
-                [](const nspc::PlayPattern& value) -> nspc::NspcSequenceOp { return value; },
-                [](const nspc::JumpTimes& value) -> nspc::NspcSequenceOp {
-                    nspc::JumpTimes shifted = value;
-                    if (shifted.target.index.has_value()) {
-                        shifted.target.index = *shifted.target.index + 1;
-                    }
-                    return shifted;
-                },
-                [](const nspc::AlwaysJump& value) -> nspc::NspcSequenceOp {
-                    nspc::AlwaysJump shifted = value;
-                    if (shifted.target.index.has_value()) {
-                        shifted.target.index = *shifted.target.index + 1;
-                    }
-                    return shifted;
-                },
-                [](const nspc::FastForwardOn& value) -> nspc::NspcSequenceOp { return value; },
-                [](const nspc::FastForwardOff& value) -> nspc::NspcSequenceOp { return value; },
-                [](const nspc::EndSequence& value) -> nspc::NspcSequenceOp { return value; },
-            },
-            op));
+        rebuilt.push_back(
+            std::visit(nspc::overloaded{
+                           [](const nspc::PlayPattern& value) -> nspc::NspcSequenceOp { return value; },
+                           [](const nspc::JumpTimes& value) -> nspc::NspcSequenceOp {
+                               nspc::JumpTimes shifted = value;
+                               if (shifted.target.index.has_value()) {
+                                   shifted.target.index = *shifted.target.index + 1;
+                               }
+                               return shifted;
+                           },
+                           [](const nspc::AlwaysJump& value) -> nspc::NspcSequenceOp {
+                               nspc::AlwaysJump shifted = value;
+                               if (shifted.target.index.has_value()) {
+                                   shifted.target.index = *shifted.target.index + 1;
+                               }
+                               return shifted;
+                           },
+                           [](const nspc::FastForwardOn& value) -> nspc::NspcSequenceOp { return value; },
+                           [](const nspc::FastForwardOff& value) -> nspc::NspcSequenceOp { return value; },
+                           [](const nspc::EndSequence& value) -> nspc::NspcSequenceOp { return value; },
+                       },
+                       op));
     }
     return rebuilt;
 }
@@ -923,12 +924,12 @@ emulation::SpcAddressAccess toWatchAccess(nspc::NspcEngineHookOperation op) {
 }
 
 void applyPlaybackSnapshot(app::PlaybackTrackingState& playback, bool tickEvent, bool patternEvent,
-                           const std::vector<nspc::NspcSequenceOp>* sequenceOps,
-                           TriggerSequenceState* sequenceState, int initialSequenceRow, bool hasTickTrigger) {
+                           const std::vector<nspc::NspcSequenceOp>* sequenceOps, TriggerSequenceState* sequenceState,
+                           int initialSequenceRow, bool hasTickTrigger) {
     if (patternEvent) {
         // Trigger-driven sequence tracking advances on each pattern trigger.
-        const bool firstPatternTrigger =
-            playback.awaitingFirstPatternTrigger.exchange(false, std::memory_order_relaxed);
+        const bool firstPatternTrigger = playback.awaitingFirstPatternTrigger.exchange(false,
+                                                                                       std::memory_order_relaxed);
         const int priorTick = playback.patternTick.load(std::memory_order_relaxed);
         // Some engines can hit the pattern trigger address more than once before a tick advances.
         // Ignore duplicate callbacks so the tracked row does not jump ahead by one.
@@ -947,7 +948,8 @@ void applyPlaybackSnapshot(app::PlaybackTrackingState& playback, bool tickEvent,
             }
             playback.sequenceRow.store(startRow, std::memory_order_relaxed);
         } else if (sequenceOps != nullptr && sequenceState != nullptr && !sequenceOps->empty()) {
-            const SequenceAdvanceResult next = advanceSequenceRowFromPatternTrigger(*sequenceOps, currentRow, *sequenceState);
+            const SequenceAdvanceResult next = advanceSequenceRowFromPatternTrigger(*sequenceOps, currentRow,
+                                                                                    *sequenceState);
             playback.sequenceRow.store(next.row, std::memory_order_relaxed);
             if (next.reachedEnd) {
                 playback.hooksInstalled.store(false, std::memory_order_relaxed);
@@ -981,8 +983,7 @@ void applyPlaybackSnapshot(app::PlaybackTrackingState& playback, bool tickEvent,
 
 void installPlaybackHooks(const nspc::NspcEngineConfig& engine, emulation::SpcDsp& dsp,
                           app::PlaybackTrackingState& playback,
-                          std::optional<std::vector<nspc::NspcSequenceOp>> sequenceSnapshot,
-                          int initialSequenceRow) {
+                          std::optional<std::vector<nspc::NspcSequenceOp>> sequenceSnapshot, int initialSequenceRow) {
     dsp.clearAddressWatches();
     resetPlaybackTracking(playback);
 
@@ -1010,21 +1011,18 @@ void installPlaybackHooks(const nspc::NspcEngineConfig& engine, emulation::SpcDs
         watch.address = trigger->address;
         watch.value = trigger->value;
         watch.includeDummy = trigger->includeDummy;
-        const auto watchId =
-            dsp.addAddressWatch(watch,
-                                [&playback, tickEvent, patternEvent, sequenceOps,
-                                 triggerState, initialSequenceRow, hasTickTrigger,
-                                 triggerCount, triggerHitCount](
-                                    const emulation::SpcAddressAccessEvent& event) {
-            (void)event;
-            *triggerHitCount = static_cast<uint16_t>(*triggerHitCount + 1u);
-            if (*triggerHitCount < triggerCount) {
-                return;
-            }
-            *triggerHitCount = 0;
-            applyPlaybackSnapshot(playback, tickEvent, patternEvent, sequenceOps.get(), triggerState.get(),
-                                  initialSequenceRow, hasTickTrigger);
-        });
+        const auto watchId = dsp.addAddressWatch(
+            watch, [&playback, tickEvent, patternEvent, sequenceOps, triggerState, initialSequenceRow, hasTickTrigger,
+                    triggerCount, triggerHitCount](const emulation::SpcAddressAccessEvent& event) {
+                (void)event;
+                *triggerHitCount = static_cast<uint16_t>(*triggerHitCount + 1u);
+                if (*triggerHitCount < triggerCount) {
+                    return;
+                }
+                *triggerHitCount = 0;
+                applyPlaybackSnapshot(playback, tickEvent, patternEvent, sequenceOps.get(), triggerState.get(),
+                                      initialSequenceRow, hasTickTrigger);
+            });
         if (watchId != 0) {
             ++installed;
         }
@@ -1064,7 +1062,8 @@ bool hasAnyUserProvidedContent(const nspc::NspcProject& project) {
 
     const bool hasUserInstruments = std::any_of(project.instruments().begin(), project.instruments().end(),
                                                 [](const nspc::NspcInstrument& instrument) {
-                                                    return instrument.contentOrigin == nspc::NspcContentOrigin::UserProvided;
+                                                    return instrument.contentOrigin ==
+                                                           nspc::NspcContentOrigin::UserProvided;
                                                 });
     if (hasUserInstruments) {
         return true;
@@ -1079,8 +1078,7 @@ bool hasAnyUserProvidedContent(const nspc::NspcProject& project) {
     return nspc::NspcBuildOptions{
         .optimizeSubroutines = appState.optimizeSubroutinesOnBuild,
         .optimizerOptions = appState.optimizerOptions,
-        .applyOptimizedSongToProject =
-            appState.optimizeSubroutinesOnBuild && !appState.flattenSubroutinesOnLoad,
+        .applyOptimizedSongToProject = appState.optimizeSubroutinesOnBuild && !appState.flattenSubroutinesOnLoad,
         .compactAramLayout = appState.compactAramLayoutOnBuild,
     };
 }
@@ -1108,7 +1106,7 @@ struct PatchedSongBuildResult {
 };
 
 std::optional<int> selectedSongIndexForPlayback(const app::AppState& appState) {
-    if (!appState.project.has_value() || !appState.spcPlayer || appState.sourceSpcData.empty()) {
+    if (!appState.project.has_value() || !appState.spcPlayer || appState.project->sourceSpcData().empty()) {
         return std::nullopt;
     }
 
@@ -1161,10 +1159,9 @@ std::optional<PatchedSongBuildResult> buildPatchedSongForPlayback(nspc::NspcProj
 
         patchedImage = std::move(*patched);
         patchCount += upload.chunks.size();
-        totalPatchBytes += std::accumulate(upload.chunks.begin(), upload.chunks.end(), static_cast<size_t>(0),
-                                           [](size_t sum, const nspc::NspcUploadChunk& chunk) {
-                                               return sum + chunk.bytes.size();
-                                           });
+        totalPatchBytes +=
+            std::accumulate(upload.chunks.begin(), upload.chunks.end(), static_cast<size_t>(0),
+                            [](size_t sum, const nspc::NspcUploadChunk& chunk) { return sum + chunk.bytes.size(); });
         return true;
     };
 
@@ -1225,9 +1222,9 @@ void clearConfiguredEchoBuffer(emulation::SpcDsp& dsp, const nspc::NspcEngineCon
     std::fill_n(all.data() + echoStart, echoLen, static_cast<uint8_t>(0));
 }
 
-void setVoiceVolumesToZero(emulation::SpcDsp& dsp) { 
-    for (uint8_t voice = 0; voice < 8; ++voice) { 
-        dsp.writeDspRegister(static_cast<uint8_t>(voice * 0x10), 0x00); 
+void setVoiceVolumesToZero(emulation::SpcDsp& dsp) {
+    for (uint8_t voice = 0; voice < 8; ++voice) {
+        dsp.writeDspRegister(static_cast<uint8_t>(voice * 0x10), 0x00);
         dsp.writeDspRegister(static_cast<uint8_t>((voice * 0x10) + 1), 0x00);
     }
 }
@@ -1235,15 +1232,22 @@ void setVoiceVolumesToZero(emulation::SpcDsp& dsp) {
 }  // namespace
 
 ControlPanel::ControlPanel(app::AppState& appState) : appState_(appState) {
-    appState_.playSong = [this]() { return doPlaySong(); };
-    appState_.playFromPattern = [this]() { return doPlayFromPattern(); };
-    appState_.stopPlayback = [this]() { doStop(); };
-    appState_.isPlaying = [this]() { return doIsPlaying(); };
+    appState_.playSong = [this]() {
+        return doPlaySong();
+    };
+    appState_.playFromPattern = [this]() {
+        return doPlayFromPattern();
+    };
+    appState_.stopPlayback = [this]() {
+        doStop();
+    };
+    appState_.isPlaying = [this]() {
+        return doIsPlaying();
+    };
 }
 
 bool ControlPanel::playSpcImage(const std::vector<uint8_t>& spcImage, uint16_t entryPoint,
-                                const nspc::NspcEngineConfig& engineConfig, int songIndex,
-                                std::string statusText,
+                                const nspc::NspcEngineConfig& engineConfig, int songIndex, std::string statusText,
                                 std::optional<std::vector<nspc::NspcSequenceOp>> trackingSequence,
                                 int trackingStartRow) {
     auto& player = *appState_.spcPlayer;
@@ -1257,7 +1261,7 @@ bool ControlPanel::playSpcImage(const std::vector<uint8_t>& spcImage, uint16_t e
     }
 
     auto& dsp = player.spcDsp();
-    
+
     // Start warmup from the configured engine entrypoint instead of the source SPC snapshot PC.
     // We intentionally do not call reset() here because that would wipe the uploaded song data.
     dsp.setPC(entryPoint);
@@ -1304,17 +1308,16 @@ bool ControlPanel::doPlaySong() {
         return false;
     }
 
-    auto patchedBuild =
-        buildPatchedSongForPlayback(project, songIndex, buildOptions, appState_.sourceSpcData, status_);
+    auto patchedBuild = buildPatchedSongForPlayback(project, songIndex, buildOptions,
+                                                    appState_.project->sourceSpcData(), status_);
     if (!patchedBuild.has_value()) {
         return false;
     }
 
     warnings_ = std::move(patchedBuild->warnings);
-    return playSpcImage(
-        patchedBuild->spcImage, project.engineConfig().entryPoint, project.engineConfig(), songIndex,
-        std::format("Playing song {:02X} | {} patches | {} bytes", songIndex, patchedBuild->patchCount,
-                    patchedBuild->totalPatchBytes));
+    return playSpcImage(patchedBuild->spcImage, project.engineConfig().entryPoint, project.engineConfig(), songIndex,
+                        std::format("Playing song {:02X} | {} patches | {} bytes", songIndex, patchedBuild->patchCount,
+                                    patchedBuild->totalPatchBytes));
 }
 
 bool ControlPanel::doPlayFromPattern() {
@@ -1362,22 +1365,19 @@ bool ControlPanel::doPlayFromPattern() {
 
     auto playbackBuildOptions = buildOptions;
     playbackBuildOptions.applyOptimizedSongToProject = false;
-    auto patchedBuild =
-        buildPatchedSongForPlayback(playbackProject, songIndex, playbackBuildOptions, appState_.sourceSpcData, status_);
+    auto patchedBuild = buildPatchedSongForPlayback(playbackProject, songIndex, playbackBuildOptions,
+                                                    appState_.project->sourceSpcData(), status_);
     if (!patchedBuild.has_value()) {
         return false;
     }
     warnings_ = std::move(patchedBuild->warnings);
 
-    const auto patternId =
-        patternIdFromSequenceRow(project.songs()[static_cast<size_t>(songIndex)], startRow);
-    const std::string patternText =
-        patternId.has_value() ? std::format("{:02X}", *patternId) : std::string{"??"};
-    return playSpcImage(
-        patchedBuild->spcImage, project.engineConfig().entryPoint, project.engineConfig(), songIndex,
-        std::format("Playing song {:02X} from row {:02X} (P{}) | {} patches | {} bytes", songIndex,
-                    startRow, patternText, patchedBuild->patchCount, patchedBuild->totalPatchBytes),
-        trackingSequence, startRow);
+    const auto patternId = patternIdFromSequenceRow(project.songs()[static_cast<size_t>(songIndex)], startRow);
+    const std::string patternText = patternId.has_value() ? std::format("{:02X}", *patternId) : std::string{"??"};
+    return playSpcImage(patchedBuild->spcImage, project.engineConfig().entryPoint, project.engineConfig(), songIndex,
+                        std::format("Playing song {:02X} from row {:02X} (P{}) | {} patches | {} bytes", songIndex,
+                                    startRow, patternText, patchedBuild->patchCount, patchedBuild->totalPatchBytes),
+                        trackingSequence, startRow);
 }
 
 void ControlPanel::doStop() {
@@ -1414,7 +1414,7 @@ void ControlPanel::draw() {
 
     const bool hasProject = appState_.project.has_value();
     const bool hasPlayer = static_cast<bool>(appState_.spcPlayer);
-    const bool hasBaseSpc = !appState_.sourceSpcData.empty();
+    const bool hasBaseSpc = appState_.project.has_value() && !appState_.project->sourceSpcData().empty();
     const auto selectedSongIndex = selectedSongIndexForPlayback(appState_);
     const bool songSelectionValid = selectedSongIndex.has_value();
 
@@ -1422,7 +1422,7 @@ void ControlPanel::draw() {
         ImGui::TextDisabled("No project loaded");
         ImGui::TextDisabled("Import an SPC to build/play edited songs");
     }
-    
+
     ImGui::PopFont();
 
     ImGui::Checkbox("Follow sequence", &appState_.playback.followPlayback);
@@ -1460,9 +1460,8 @@ void ControlPanel::draw() {
     //     roundtripStatus_.clear();
 
     //     auto& project = *appState_.project;
-    //     const int songIndex = std::clamp(appState_.selectedSongIndex, 0, static_cast<int>(project.songs().size()) - 1);
-    //     auto verifyResult = nspc::verifySongRoundTrip(project, songIndex);
-    //     if (!verifyResult.has_value()) {
+    //     const int songIndex = std::clamp(appState_.selectedSongIndex, 0, static_cast<int>(project.songs().size()) -
+    //     1); auto verifyResult = nspc::verifySongRoundTrip(project, songIndex); if (!verifyResult.has_value()) {
     //         roundtripStatus_ = std::format("Roundtrip verify failed: {}", verifyResult.error());
     //     } else {
     //         roundtripStatus_ = verifyResult->equivalent ? "Roundtrip verify: PASS" : "Roundtrip verify: FAIL";
@@ -1496,8 +1495,6 @@ void ControlPanel::draw() {
             }
         }
     }
-
-
 }
 
 }  // namespace ntrak::ui

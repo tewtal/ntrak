@@ -82,6 +82,7 @@ struct NspcEngineExtension {
 struct NspcEngineConfig {
     std::string id;
     std::string engineVersion;
+    std::string engineVariant;
     std::string name;
     uint16_t entryPoint = 0;
     std::optional<uint16_t> sampleHeaderPtr = std::nullopt;
@@ -120,11 +121,15 @@ struct NspcEngineConfig {
 
 const NspcEngineExtension* findEngineExtension(const NspcEngineConfig& config, std::string_view name);
 const NspcEngineExtensionVcmd* findEngineExtensionVcmd(const NspcEngineConfig& config, uint8_t id,
-                                                        bool enabledOnly = true);
-std::optional<uint8_t> extensionVcmdParamByteCount(const NspcEngineConfig& config, uint8_t id,
-                                                   bool enabledOnly = true);
+                                                       bool enabledOnly = true);
+std::optional<uint8_t> extensionVcmdParamByteCount(const NspcEngineConfig& config, uint8_t id, bool enabledOnly = true);
 
 std::optional<std::vector<NspcEngineConfig>> loadEngineConfigs();
 NspcEngineConfig resolveEngineConfigPointers(const NspcEngineConfig& config, std::span<const std::uint8_t> aram);
+
+/// Scan ARAM for the SPC700 bytecode pattern that reads the song pointer table.
+/// Returns the address within ARAM of the operand (i.e. the value to use as songIndexPtr).
+std::optional<uint16_t> scanForSongIndexPointer(std::span<const std::uint8_t> aram, uint16_t searchStart,
+                                                uint16_t searchEnd);
 
 }  // namespace ntrak::nspc

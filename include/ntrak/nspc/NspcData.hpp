@@ -265,16 +265,22 @@ const char* vcmdNameForId(uint8_t id);
 struct Note {
     uint8_t pitch;
 };
+
 struct Tie {};
+
 struct Rest {};
+
 struct Percussion {
     uint8_t index;
 };
+
 struct Subroutine {
     int id;
     uint16_t originalAddr;
 };
+
 struct End {};
+
 using NspcEvent = std::variant<std::monostate, Duration, Vcmd, Note, Tie, Rest, Percussion, Subroutine, End>;
 
 using NspcEventId = uint64_t;
@@ -392,18 +398,30 @@ public:
 
     std::optional<int> loopPatternIndex() const { return loopPatternIndex_; }
 
+    uint16_t sequenceEndAddr() const { return sequenceEndAddr_; }
+
     int songId() const { return songId_; }
+
     void setSongId(int songId) { songId_ = songId; }
+
     const std::string& songName() const { return songName_; }
+
     void setSongName(std::string songName) { songName_ = std::move(songName); }
+
     const std::string& author() const { return author_; }
+
     void setAuthor(std::string author) { author_ = std::move(author); }
+
     NspcContentOrigin contentOrigin() const { return contentOrigin_; }
+
     void setContentOrigin(NspcContentOrigin contentOrigin) { contentOrigin_ = contentOrigin; }
+
     bool isUserProvided() const { return contentOrigin_ == NspcContentOrigin::UserProvided; }
+
     bool isEngineProvided() const { return contentOrigin_ == NspcContentOrigin::EngineProvided; }
 
     NspcEventId peekNextEventId() const { return nextEventId_; }
+
     void setNextEventId(NspcEventId id) { nextEventId_ = id; }
 
     const NspcEvent* resolveEvent(const NspcEventRef& ref) const;
@@ -439,6 +457,7 @@ private:
     std::optional<int> loopPatternIndex_;
 
     std::vector<NspcSequenceOp> sequence_;
+    uint16_t sequenceEndAddr_ = 0;
 
     std::unordered_map<uint16_t, int> trackAddrToIndex_;
     std::unordered_map<uint16_t, int> subroutineAddrToIndex_;

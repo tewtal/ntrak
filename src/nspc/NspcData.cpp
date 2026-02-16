@@ -260,7 +260,8 @@ std::optional<Vcmd> constructVcmd(uint8_t id, const uint8_t* params) {
 }
 
 std::optional<Vcmd> constructVcmdForEngine(uint8_t id, const uint8_t* params, const NspcEngineConfig& engine) {
-    if (const auto extensionParamCount = extensionVcmdParamByteCount(engine, id, true); extensionParamCount.has_value()) {
+    if (const auto extensionParamCount = extensionVcmdParamByteCount(engine, id, true);
+        extensionParamCount.has_value()) {
         VcmdExtension extension{};
         extension.id = id;
         extension.paramCount = *extensionParamCount;
@@ -547,8 +548,7 @@ std::vector<NspcEventEntry> NspcSong::parseEvents(emulation::AramView aram, uint
                 throw std::runtime_error("Encountered unmapped raw VCMD in track data");
             }
 
-            if (const auto extensionParamCount =
-                    extensionParamCountForId(extensionParamCountById_, *translatedVcmd);
+            if (const auto extensionParamCount = extensionParamCountForId(extensionParamCountById_, *translatedVcmd);
                 extensionParamCount.has_value()) {
                 const uint32_t neededBytes = 1u + *extensionParamCount;
                 if (hardStopExclusive.has_value() &&
@@ -679,7 +679,7 @@ NspcSong::NspcSong(emulation::AramView aram, const NspcEngineConfig& config, int
         }
     }
 
-    uint16_t seqPointer = aram.read16(config.songIndexPointers + songIndex * 2);
+    uint16_t seqPointer = aram.read16(config.songIndexPointers + (songIndex * 2));
 
     if (seqPointer == 0) {
         throw std::runtime_error("Invalid song index: pointer is null");
@@ -732,6 +732,12 @@ NspcSong::NspcSong(emulation::AramView aram, const NspcEngineConfig& config, int
                 }
                 sequence_.push_back(AlwaysJump{lowByte, SequenceTarget{targetIndex, jumpAddr}});
                 seqPointer += 4;
+
+                // For "addmusick" variants we stop parsing after a jump that goes backwards
+                if (config.engineVariant == "addmusick" && targetIndex.has_value() && targetIndex.value() < opIndex) {
+                    break;
+                }
+
             } else {
                 // Unknown, skip
                 seqPointer += 2;
@@ -752,6 +758,8 @@ NspcSong::NspcSong(emulation::AramView aram, const NspcEngineConfig& config, int
             seqPointer += 2;
         }
     }
+
+    sequenceEndAddr_ = seqPointer;
 
     // Resolve jump targets now that all sequence row addresses are known.
     for (auto& op : sequence_) {
@@ -873,19 +881,21 @@ void NspcSong::flattenSubroutines() {
     };
 
     // Go though all tracks
-    for (auto &track : tracks_) {
+    for (auto& track : tracks_) {
         auto flatEvents = std::vector<NspcEventEntry>{};
-        for (const auto &entry : track.events) {
+        for (const auto& entry : track.events) {
             if (std::holds_alternative<Vcmd>(entry.event) &&
                 std::holds_alternative<VcmdSubroutineCall>(std::get<Vcmd>(entry.event).vcmd)) {
-                const auto &subCall = std::get<VcmdSubroutineCall>(std::get<Vcmd>(entry.event).vcmd);
-                const auto subrIt = std::find_if(subroutines_.begin(), subroutines_.end(),
-                                                 [&](const NspcSubroutine &subr) { return subr.id == subCall.subroutineId; });
+                const auto& subCall = std::get<VcmdSubroutineCall>(std::get<Vcmd>(entry.event).vcmd);
+                const auto subrIt =
+                    std::find_if(subroutines_.begin(), subroutines_.end(),
+                                 [&](const NspcSubroutine& subr) { return subr.id == subCall.subroutineId; });
                 if (subrIt != subroutines_.end()) {
-                    for(int i = 0; i < subCall.count; ++i) {
+                    for (int i = 0; i < subCall.count; ++i) {
                         // Skip the last end event in the subroutine since it's not needed when inlining
                         for (size_t j = 0; j < subrIt->events.size(); ++j) {
-                            if (j == subrIt->events.size() - 1 && std::holds_alternative<End>(subrIt->events[j].event)) {
+                            if (j == subrIt->events.size() - 1 &&
+                                std::holds_alternative<End>(subrIt->events[j].event)) {
                                 continue;
                             }
                             flatEvents.push_back(cloneWithNewId(subrIt->events[j]));
@@ -907,6 +917,5 @@ void NspcSong::flattenSubroutines() {
     nextSubroutineId_ = 0;
     nextEventId_ = nextId;
 }
-
 
 }  // namespace ntrak::nspc

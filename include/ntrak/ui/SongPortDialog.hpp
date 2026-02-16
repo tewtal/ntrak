@@ -25,8 +25,7 @@ public:
     void draw();
 
     /// Called after a successful port to install the modified target project into the app.
-    std::function<void(nspc::NspcProject, std::vector<uint8_t>, std::optional<std::filesystem::path>)>
-        onInstallProject;
+    std::function<void(nspc::NspcProject)> onInstallProject;
 
 private:
     void drawSourceSongSection(const nspc::NspcProject& sourceProject);
@@ -50,7 +49,6 @@ private:
     // Target state
     std::optional<std::filesystem::path> targetSpcPath_;
     std::optional<nspc::NspcProject> targetProject_;
-    std::vector<uint8_t> targetSpcData_;
     std::string targetLoadError_;
 
     // Instrument mapping (rebuilt when source/target changes)

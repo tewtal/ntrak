@@ -596,6 +596,7 @@
         "name": "Super Mario World (AddmusicK)",
         "entryPoint": "0x0400",
         "engineVersion": "0.0",
+        "engineVariant": "addmusick",
         "defaultDspTablePtr": "0x041C",
         "instrumentHeaderPtrLo": "0x0D9D",
         "instrumentHeaderPtrHi": "0x0DA0",
@@ -709,15 +710,15 @@
                     },
                     {
                         "id": "0xFA",
-                        "name": "Misc Command 2",
-                        "description": "Misc 2",
+                        "name": "ExtFA",
+                        "description": "Extensions (PitchMod/Gain/Transpos/Amplify/EchoBuffer/GainOld)",
                         "parameters": [
                             {
-                                "name": "?",
+                                "name": "Option",
                                 "type": "byte"
                             },
                             {
-                                "name": "??",
+                                "name": "Value",
                                 "type": "byte"
                             }
                         ]
@@ -739,19 +740,11 @@
                     },
                     {
                         "id": "0xFC",
-                        "name": "Unknown",
-                        "description": "Unknown",
+                        "name": "Callback",
+                        "description": "Callback",
                         "parameters": [
                             {
                                 "name": "?",
-                                "type": "byte"
-                            },
-                            {
-                                "name": "??",
-                                "type": "byte"
-                            },
-                            {
-                                "name": "??",
                                 "type": "byte"
                             },
                             {
@@ -770,12 +763,6 @@
                         "id": "0xFE",
                         "name": "Pitch Envelope Off",
                         "description": "Pitch Envelope Off",
-                        "parameters": []
-                    },
-                    {
-                        "id": "0xFF",
-                        "name": "NOP",
-                        "description": "NOP",
                         "parameters": []
                     }
                 ]

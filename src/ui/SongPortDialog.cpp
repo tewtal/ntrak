@@ -3,12 +3,12 @@
 #include "ntrak/nspc/NspcParser.hpp"
 
 #include <imgui.h>
-#include <nfd.hpp>
 
 #include <algorithm>
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <nfd.hpp>
 #include <unordered_map>
 
 namespace ntrak::ui {
@@ -58,7 +58,8 @@ const Item* lookupById(const IdLookup<Item>& lookup, int id) {
     return it->second;
 }
 
-std::string sourceMappingLabel(const nspc::InstrumentMapping& mapping, const IdLookup<nspc::NspcInstrument>& sourceInstById,
+std::string sourceMappingLabel(const nspc::InstrumentMapping& mapping,
+                               const IdLookup<nspc::NspcInstrument>& sourceInstById,
                                const IdLookup<nspc::BrrSample>& sourceSampleById) {
     std::string label = std::format("${:02X}", mapping.sourceInstrumentId);
     const auto* sourceInst = lookupById(sourceInstById, mapping.sourceInstrumentId);
@@ -99,16 +100,6 @@ void setDeleteSelection(std::set<int>& instrumentsToDelete, int instrumentId, bo
         return;
     }
     instrumentsToDelete.erase(instrumentId);
-}
-
-void syncProjectAramToSpcData(const nspc::NspcProject& project, std::vector<uint8_t>& spcData) {
-    constexpr size_t kSpcHeaderSize = 0x100;
-    constexpr size_t kAramSize = 0x10000;
-    if (spcData.size() < kSpcHeaderSize + kAramSize) {
-        return;
-    }
-    const auto aramAll = project.aram().all();
-    std::copy(aramAll.begin(), aramAll.end(), spcData.begin() + static_cast<std::ptrdiff_t>(kSpcHeaderSize));
 }
 
 void drawMappingSourceColumns(app::AppState& appState, const nspc::NspcProject& sourceProject,
@@ -498,11 +489,12 @@ void SongPortDialog::drawTargetInstrumentsRemovalSection() {
     const auto targetSampleById = buildIdLookup(tgtSamples);
 
     ImGui::SeparatorText("Target Instruments to Remove");
-    ImGui::TextDisabled("Mark instruments to delete before porting. Unused samples from those instruments are removed too.");
+    ImGui::TextDisabled(
+        "Mark instruments to delete before porting. Unused samples from those instruments are removed too.");
 
     ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(4, 3));
-    if (ImGui::BeginTable("##tgtinstruments", 5, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
-                          ImVec2(0, 220))) {
+    if (ImGui::BeginTable("##tgtinstruments", 5,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 220))) {
         ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 28);
         ImGui::TableSetupColumn("Instrument", ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch);
@@ -511,7 +503,8 @@ void SongPortDialog::drawTargetInstrumentsRemovalSection() {
         ImGui::TableHeadersRow();
 
         for (const auto& instrument : tgtInstruments) {
-            drawTargetInstrumentRemovalRow(appState_, *targetProject_, instrumentsToDelete_, instrument, targetSampleById);
+            drawTargetInstrumentRemovalRow(appState_, *targetProject_, instrumentsToDelete_, instrument,
+                                           targetSampleById);
         }
 
         ImGui::EndTable();
@@ -595,7 +588,6 @@ void SongPortDialog::rebuildMappings() {
 bool SongPortDialog::loadTargetSpc(const std::filesystem::path& path) {
     targetLoadError_.clear();
     targetProject_.reset();
-    targetSpcData_.clear();
     instrumentsToDelete_.clear();
 
     std::ifstream file(path, std::ios::binary);
@@ -603,17 +595,17 @@ bool SongPortDialog::loadTargetSpc(const std::filesystem::path& path) {
         targetLoadError_ = std::format("Failed to open '{}'", path.filename().string());
         return false;
     }
-    targetSpcData_ = std::vector<uint8_t>(std::istreambuf_iterator<char>(file), {});
+    auto fileData = std::vector<uint8_t>(std::istreambuf_iterator<char>(file), {});
 
-    auto parseResult = nspc::NspcParser::load(targetSpcData_);
+    auto parseResult = nspc::NspcParser::load(fileData);
     if (!parseResult.has_value()) {
         targetLoadError_ = std::format("Failed to parse SPC '{}'", path.filename().string());
-        targetSpcData_.clear();
         return false;
     }
 
     targetProject_ = std::move(*parseResult);
     targetSpcPath_ = path;
+    targetProject_->setSourceSpcPath(path);
     return true;
 }
 
@@ -644,13 +636,13 @@ void SongPortDialog::executePort() {
                               portResult.resultSongIndex);
 
     // Playback patches song/sequence data on top of loaded SPC bytes, so mirror ARAM updates into SPC data.
-    syncProjectAramToSpcData(targetCopy, targetSpcData_);
+    targetCopy.syncAramToSpcData();
 
     // Keep dialog target state in sync so repeated ports keep working without reloading.
     targetProject_ = targetCopy;
 
     if (onInstallProject) {
-        onInstallProject(targetCopy, targetSpcData_, targetSpcPath_);
+        onInstallProject(targetCopy);
     }
 
     ImGui::CloseCurrentPopup();

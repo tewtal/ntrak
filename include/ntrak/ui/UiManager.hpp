@@ -6,8 +6,8 @@
 #include "ntrak/ui/Panel.hpp"
 #include "ntrak/ui/SongPortDialog.hpp"
 
-#include <functional>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -53,8 +53,7 @@ public:
     app::AppState& appState() { return appState_; }
 
     /// Install a project as the active project (resets selection and playback tracking).
-    void installProject(nspc::NspcProject project, std::vector<uint8_t> sourceSpcData,
-                        std::optional<std::filesystem::path> sourceSpcPath = std::nullopt);
+    void installProject(nspc::NspcProject project);
 
 private:
     void handleGlobalShortcuts();

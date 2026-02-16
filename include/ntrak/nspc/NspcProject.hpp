@@ -4,10 +4,12 @@
 #include "ntrak/nspc/NspcEngine.hpp"
 
 #include <cstddef>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace ntrak::nspc {
 
@@ -68,6 +70,7 @@ public:
     ~NspcProject() = default;
 
     NspcEngineConfig& engineConfig() { return engineConfig_; }
+
     const NspcEngineConfig& engineConfig() const { return engineConfig_; }
 
     emulation::AramView aram() { return emulation::AramView(aram_.data(), aram_.size()); }
@@ -79,9 +82,11 @@ public:
     std::vector<NspcSong>& songs() { return songs_; }
 
     const std::vector<NspcInstrument>& instruments() const { return instruments_; }
+
     std::vector<NspcInstrument>& instruments() { return instruments_; }
 
     const std::vector<BrrSample>& samples() const { return samples_; }
+
     std::vector<BrrSample>& samples() { return samples_; }
 
     const NspcAramUsage& aramUsage() const { return aramUsage_; }
@@ -101,8 +106,24 @@ public:
     void clearSongAddressLayout(int songId);
     void refreshAramUsage();
 
+    const std::vector<std::uint8_t>& sourceSpcData() const { return sourceSpcData_; }
+
+    std::vector<std::uint8_t>& sourceSpcData() { return sourceSpcData_; }
+
+    void setSourceSpcData(std::vector<std::uint8_t> data) { sourceSpcData_ = std::move(data); }
+
+    const std::optional<std::filesystem::path>& sourceSpcPath() const { return sourceSpcPath_; }
+
+    void setSourceSpcPath(std::optional<std::filesystem::path> path) { sourceSpcPath_ = std::move(path); }
+
+    /// Sync entire ARAM back into the SPC image.
+    void syncAramToSpcData();
+    /// Sync a specific ARAM address range into the SPC image.
+    void syncAramRangeToSpcData(uint16_t addr, size_t size);
+
 private:
     void parseInstruments();
+    void parseExtendedInstruments(emulation::AramView aramView, uint8_t entrySize);
     void parseSamples();
     void parseSongs();
     void rebuildAramUsage();
@@ -115,6 +136,8 @@ private:
     std::vector<BrrSample> samples_;
     NspcAramUsage aramUsage_;
     std::unordered_map<int, NspcSongAddressLayout> songAddressLayouts_;
+    std::vector<std::uint8_t> sourceSpcData_;
+    std::optional<std::filesystem::path> sourceSpcPath_;
 };
 
 }  // namespace ntrak::nspc

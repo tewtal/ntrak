@@ -1,4 +1,4 @@
-#include "NspcCompileShared.hpp"
+#include "ntrak/nspc/NspcCompileShared.hpp"
 
 #include <algorithm>
 #include <array>

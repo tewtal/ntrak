@@ -1,8 +1,8 @@
 #include "ntrak/ui/UiManager.hpp"
 
 #include "ntrak/common/UserGuide.hpp"
-#include "ntrak/nspc/NspcCompile.hpp"
 #include "ntrak/nspc/ItImport.hpp"
+#include "ntrak/nspc/NspcCompile.hpp"
 #include "ntrak/nspc/NspcParser.hpp"
 #include "ntrak/nspc/NspcProjectFile.hpp"
 #include "ntrak/nspc/NspcSpcExport.hpp"
@@ -130,16 +130,6 @@ void resetPlaybackTracking(app::PlaybackTrackingState& playback) {
     playback.patternTick.store(-1, std::memory_order_relaxed);
 }
 
-void syncProjectAramToSpcData(const nspc::NspcProject& project, std::vector<uint8_t>& spcData) {
-    constexpr size_t kSpcHeaderSize = 0x100;
-    constexpr size_t kAramSize = 0x10000;
-    if (spcData.size() < kSpcHeaderSize + kAramSize) {
-        return;
-    }
-    const auto aramAll = project.aram().all();
-    std::copy(aramAll.begin(), aramAll.end(), spcData.begin() + static_cast<std::ptrdiff_t>(kSpcHeaderSize));
-}
-
 void selectFirstPlayableRow(app::AppState& appState, int songIndex) {
     appState.selectedSongIndex = songIndex;
     appState.selectedPatternId.reset();
@@ -249,28 +239,24 @@ void maybeFlattenSubroutinesOnLoad(app::AppState& appState, nspc::NspcProject& p
     return nspc::NspcBuildOptions{
         .optimizeSubroutines = appState.optimizeSubroutinesOnBuild,
         .optimizerOptions = appState.optimizerOptions,
-        .applyOptimizedSongToProject =
-            appState.optimizeSubroutinesOnBuild && !appState.flattenSubroutinesOnLoad,
+        .applyOptimizedSongToProject = appState.optimizeSubroutinesOnBuild && !appState.flattenSubroutinesOnLoad,
         .includeEngineExtensions = true,
         .compactAramLayout = appState.compactAramLayoutOnBuild,
     };
 }
 
-void installLoadedProject(app::AppState& appState, nspc::NspcProject project, std::vector<uint8_t> sourceSpcData,
-                          std::optional<std::filesystem::path> sourceSpcPath = std::nullopt) {
+void installLoadedProject(app::AppState& appState, nspc::NspcProject project) {
     appState.project = std::move(project);
-    appState.sourceSpcData = std::move(sourceSpcData);
-    appState.sourceSpcPath = std::move(sourceSpcPath);
     initializeProjectSelection(appState);
     resetPlaybackTracking(appState.playback);
 
     // Clear undo/redo history on project change
     appState.commandHistory.clear();
 
-    if (appState.spcPlayer && !appState.sourceSpcData.empty()) {
+    const auto& spcData = appState.project->sourceSpcData();
+    if (appState.spcPlayer && !spcData.empty()) {
         appState.spcPlayer->stop();
-        (void)appState.spcPlayer->loadFromMemory(appState.sourceSpcData.data(),
-                                                 static_cast<uint32_t>(appState.sourceSpcData.size()));
+        (void)appState.spcPlayer->loadFromMemory(spcData.data(), static_cast<uint32_t>(spcData.size()));
     }
 }
 
@@ -288,9 +274,8 @@ UiManager::UiManager(app::AppState& appState) : appState_(appState), songPortDia
         }
     }
 
-    songPortDialog_.onInstallProject = [this](nspc::NspcProject project, std::vector<uint8_t> spcData,
-                                              std::optional<std::filesystem::path> spcPath) {
-        installProject(std::move(project), std::move(spcData), std::move(spcPath));
+    songPortDialog_.onInstallProject = [this](nspc::NspcProject project) {
+        installProject(std::move(project));
     };
 
     // Wire undo/redo callbacks
@@ -480,7 +465,8 @@ bool UiManager::importSpcFromDialog() {
     }
     maybeFlattenSubroutinesOnLoad(appState_, *parseResult);
 
-    installLoadedProject(appState_, std::move(*parseResult), std::move(*fileData), spcPath);
+    parseResult->setSourceSpcPath(spcPath);
+    installLoadedProject(appState_, std::move(*parseResult));
     currentProjectPath_.reset();
     setFileStatus(std::format("Imported SPC '{}'", spcPath.filename().string()), false);
     return true;
@@ -543,11 +529,11 @@ bool UiManager::importNspcFromDialog() {
     }
     maybeFlattenSubroutinesOnLoad(appState_, *parseResult);
 
-    installLoadedProject(appState_, std::move(*parseResult), std::move(*patchedSpcData));
+    installLoadedProject(appState_, std::move(*parseResult));
     currentProjectPath_.reset();
-    setFileStatus(
-        std::format("Imported NSPC '{}' over base SPC '{}'", nspcPath.filename().string(), spcPath.filename().string()),
-        false);
+    setFileStatus(std::format("Imported NSPC '{}' over base SPC '{}'", nspcPath.filename().string(),
+                              spcPath.filename().string()),
+                  false);
     return true;
 }
 
@@ -561,7 +547,8 @@ void UiManager::openItImportDialog() {
         setFileStatus("Select a valid song slot before importing IT", true);
         return;
     }
-    if (appState_.lockEngineContent && appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
+    if (appState_.lockEngineContent &&
+        appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
         setFileStatus("IT import blocked: selected song is engine-owned and locked. Use 'Mark User' first.", true);
         return;
     }
@@ -583,13 +570,15 @@ bool UiManager::rebuildItImportPreview() {
         itImportPreview_.reset();
         return false;
     }
-    if (appState_.lockEngineContent && appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
+    if (appState_.lockEngineContent &&
+        appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
         itImportDialogError_ = "IT import blocked: selected song is engine-owned and locked. Use 'Mark User' first.";
         itImportPreview_.reset();
         return false;
     }
 
-    auto preview = nspc::analyzeItFileForSongSlot(*appState_.project, *itImportPath_, targetSongIndex, itImportOptions_);
+    auto preview = nspc::analyzeItFileForSongSlot(*appState_.project, *itImportPath_, targetSongIndex,
+                                                  itImportOptions_);
     if (!preview.has_value()) {
         itImportDialogError_ = preview.error();
         itImportPreview_.reset();
@@ -615,14 +604,15 @@ bool UiManager::executeItImportFromWorkbench() {
         itImportDialogError_ = "Selected song slot is invalid";
         return false;
     }
-    if (appState_.lockEngineContent && appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
+    if (appState_.lockEngineContent &&
+        appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided()) {
         itImportDialogError_ = "IT import blocked: selected song is engine-owned and locked. Use 'Mark User' first.";
         setFileStatus(itImportDialogError_, true);
         return false;
     }
 
-    auto importResult =
-        nspc::importItFileIntoSongSlot(*appState_.project, *itImportPath_, targetSongIndex, itImportOptions_);
+    auto importResult = nspc::importItFileIntoSongSlot(*appState_.project, *itImportPath_, targetSongIndex,
+                                                       itImportOptions_);
     if (!importResult.has_value()) {
         itImportDialogError_ = importResult.error();
         setFileStatus(std::format("IT import failed: {}", importResult.error()), true);
@@ -636,12 +626,12 @@ bool UiManager::executeItImportFromWorkbench() {
     selectFirstPlayableRow(appState_, targetSongIndex);
 
     if (appState_.project.has_value()) {
-        syncProjectAramToSpcData(*appState_.project, appState_.sourceSpcData);
+        appState_.project->syncAramToSpcData();
     }
-    if (appState_.spcPlayer && !appState_.sourceSpcData.empty()) {
+    const auto& spcData = appState_.project->sourceSpcData();
+    if (appState_.spcPlayer && !spcData.empty()) {
         appState_.spcPlayer->stop();
-        (void)appState_.spcPlayer->loadFromMemory(appState_.sourceSpcData.data(),
-                                                  static_cast<uint32_t>(appState_.sourceSpcData.size()));
+        (void)appState_.spcPlayer->loadFromMemory(spcData.data(), static_cast<uint32_t>(spcData.size()));
     }
 
     itImportWarnings_ = std::move(report.warnings);
@@ -655,7 +645,8 @@ bool UiManager::executeItImportFromWorkbench() {
         }
     }
 
-    setFileStatus(std::format("Imported IT '{}' into song slot {:02d} ({} patterns, {} tracks, {} instruments, {} samples, {} warnings{})",
+    setFileStatus(std::format("Imported IT '{}' into song slot {:02d} ({} patterns, {} tracks, {} instruments, {} "
+                              "samples, {} warnings{})",
                               itImportPath_->filename().string(), report.targetSongIndex, report.importedPatternCount,
                               report.importedTrackCount, report.importedInstrumentCount, report.importedSampleCount,
                               itImportWarnings_.size(), extensionSummary),
@@ -686,8 +677,8 @@ void UiManager::drawItImportDialog() {
     }
 
     const int targetSongIndex = appState_.selectedSongIndex;
-    const bool validSongSelection =
-        targetSongIndex >= 0 && targetSongIndex < static_cast<int>(appState_.project->songs().size());
+    const bool validSongSelection = targetSongIndex >= 0 &&
+                                    targetSongIndex < static_cast<int>(appState_.project->songs().size());
     if (!validSongSelection) {
         ImGui::TextDisabled("Select a valid song slot in the Project panel first.");
         if (ImGui::Button("Close")) {
@@ -696,8 +687,8 @@ void UiManager::drawItImportDialog() {
         ImGui::EndPopup();
         return;
     }
-    const bool targetSongLocked =
-        appState_.lockEngineContent && appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided();
+    const bool targetSongLocked = appState_.lockEngineContent &&
+                                  appState_.project->songs()[static_cast<size_t>(targetSongIndex)].isEngineProvided();
     if (targetSongLocked) {
         ImGui::TextColored(ImVec4(0.95f, 0.6f, 0.3f, 1.0f),
                            "Selected song is engine-owned and locked. Use Project -> Mark User to allow IT import.");
@@ -763,7 +754,8 @@ void UiManager::drawItImportDialog() {
             (void)rebuildItImportPreview();
         }
 
-        if (ImGui::BeginTable("##it-import-samples", 6, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+        if (ImGui::BeginTable("##it-import-samples", 6,
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
                               ImVec2(0, 230))) {
             ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Loop", ImGuiTableColumnFlags_WidthFixed, 55);
@@ -822,7 +814,8 @@ void UiManager::drawItImportDialog() {
 
         ImGui::SeparatorText("Delete Target Instruments");
         if (ImGui::BeginTable("##it-import-delete-inst", 3,
-                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 140))) {
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                              ImVec2(0, 140))) {
             ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 35);
             ImGui::TableSetupColumn("Instrument", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch);
@@ -840,11 +833,9 @@ void UiManager::drawItImportDialog() {
                 ImGui::TableSetColumnIndex(1);
                 ImGui::TextUnformatted(instrumentLabel(instrument).c_str());
                 ImGui::TableSetColumnIndex(2);
-                const auto sampleIt =
-                    std::find_if(appState_.project->samples().begin(), appState_.project->samples().end(),
-                                 [&](const nspc::BrrSample& value) {
-                                     return value.id == (instrument.sampleIndex & 0x7F);
-                                 });
+                const auto sampleIt = std::find_if(
+                    appState_.project->samples().begin(), appState_.project->samples().end(),
+                    [&](const nspc::BrrSample& value) { return value.id == (instrument.sampleIndex & 0x7F); });
                 if (sampleIt != appState_.project->samples().end()) {
                     ImGui::TextUnformatted(sampleLabel(*sampleIt).c_str());
                 } else {
@@ -857,7 +848,8 @@ void UiManager::drawItImportDialog() {
 
         ImGui::SeparatorText("Delete Target Samples");
         if (ImGui::BeginTable("##it-import-delete-sample", 2,
-                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 140))) {
+                              ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY,
+                              ImVec2(0, 140))) {
             ImGui::TableSetupColumn("Del", ImGuiTableColumnFlags_WidthFixed, 35);
             ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableHeadersRow();
@@ -981,29 +973,30 @@ bool UiManager::openProjectFromDialog() {
     // playback — which uses sourceSpcData as the base and only patches song data on top — finds
     // the correct instrument table entries and sample directory entries.
     if (auto userContent = nspc::buildUserContentUpload(*parsedBaseProject); userContent.has_value()) {
-        if (auto updatedSpc = nspc::applyUploadToSpcImage(*userContent, *baseSpcData);
-            updatedSpc.has_value()) {
-            *baseSpcData = std::move(*updatedSpc);
+        auto& spcData = parsedBaseProject->sourceSpcData();
+        if (auto updatedSpc = nspc::applyUploadToSpcImage(*userContent, spcData); updatedSpc.has_value()) {
+            spcData = std::move(*updatedSpc);
         }
     }
-
-    installLoadedProject(appState_, std::move(*parsedBaseProject), std::move(*baseSpcData), spcPath);
+    parsedBaseProject->setSourceSpcPath(spcPath);
+    installLoadedProject(appState_, std::move(*parsedBaseProject));
     currentProjectPath_ = overlayPath;
 
     bool rememberedBaseSpc = false;
     if (promptedForBaseSpc && !overlayData->baseSpcPath.has_value()) {
-        auto rememberResult = nspc::saveProjectIrFile(*appState_.project, overlayPath, appState_.sourceSpcPath);
+        auto rememberResult = nspc::saveProjectIrFile(*appState_.project, overlayPath,
+                                                      appState_.project->sourceSpcPath());
         rememberedBaseSpc = rememberResult.has_value();
     }
 
     if (rememberedBaseSpc) {
-        setFileStatus(std::format("Opened project '{}' with base SPC '{}' (remembered)", overlayPath.filename().string(),
-                                  spcPath.filename().string()),
+        setFileStatus(std::format("Opened project '{}' with base SPC '{}' (remembered)",
+                                  overlayPath.filename().string(), spcPath.filename().string()),
                       false);
     } else {
-    setFileStatus(std::format("Opened project '{}' with base SPC '{}'", overlayPath.filename().string(),
-                              spcPath.filename().string()),
-                  false);
+        setFileStatus(std::format("Opened project '{}' with base SPC '{}'", overlayPath.filename().string(),
+                                  spcPath.filename().string()),
+                      false);
     }
     return true;
 }
@@ -1036,7 +1029,7 @@ bool UiManager::saveProjectToPath(const std::filesystem::path& path) {
         }
     }
 
-    auto saveResult = nspc::saveProjectIrFile(*appState_.project, path, appState_.sourceSpcPath);
+    auto saveResult = nspc::saveProjectIrFile(*appState_.project, path, appState_.project->sourceSpcPath());
     if (!saveResult.has_value()) {
         setFileStatus(std::format("Save failed: {}", saveResult.error()), true);
         return false;
@@ -1135,7 +1128,7 @@ bool UiManager::exportSpcFromDialog() {
         return false;
     }
 
-    if (appState_.sourceSpcData.empty()) {
+    if (appState_.project->sourceSpcData().empty()) {
         setFileStatus("No base SPC file available for export", true);
         return false;
     }
@@ -1166,9 +1159,8 @@ bool UiManager::exportSpcFromDialog() {
     }
 
     const std::filesystem::path path = outPath.get();
-    auto spcData =
-        nspc::buildAutoPlaySpc(*appState_.project, appState_.sourceSpcData, songIndex, std::nullopt,
-                               buildOptionsFromAppState(appState_));
+    auto spcData = nspc::buildAutoPlaySpc(*appState_.project, appState_.project->sourceSpcData(), songIndex,
+                                          std::nullopt, buildOptionsFromAppState(appState_));
     if (!spcData.has_value()) {
         setFileStatus(std::format("SPC export failed: {}", spcData.error()), true);
         return false;
@@ -1184,10 +1176,9 @@ bool UiManager::exportSpcFromDialog() {
     return true;
 }
 
-void UiManager::installProject(nspc::NspcProject project, std::vector<uint8_t> sourceSpcData,
-                               std::optional<std::filesystem::path> sourceSpcPath) {
+void UiManager::installProject(nspc::NspcProject project) {
     maybeFlattenSubroutinesOnLoad(appState_, project);
-    installLoadedProject(appState_, std::move(project), std::move(sourceSpcData), std::move(sourceSpcPath));
+    installLoadedProject(appState_, std::move(project));
     currentProjectPath_.reset();
 }
 
@@ -1251,7 +1242,8 @@ void UiManager::drawTitleBar() {
         if (ImGui::BeginMenu("File")) {
             const bool hasProject = appState_.project.has_value();
             const bool hasValidSelectedSong = hasProject && appState_.selectedSongIndex >= 0 &&
-                                              appState_.selectedSongIndex < static_cast<int>(appState_.project->songs().size());
+                                              appState_.selectedSongIndex <
+                                                  static_cast<int>(appState_.project->songs().size());
 
             ImGui::MenuItem("New", "Ctrl+N");
 
