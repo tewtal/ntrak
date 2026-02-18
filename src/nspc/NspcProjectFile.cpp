@@ -32,13 +32,27 @@ bool isSmwV00Engine(const NspcEngineConfig& config) {
 
 void writeOverlayInstrumentToAram(NspcProject& project, const NspcInstrument& instrument) {
     const auto& config = project.engineConfig();
-    if (config.instrumentHeaders == 0 || instrument.id < 0) {
+    if (instrument.id < 0) {
         return;
     }
 
     const uint8_t entrySize = std::clamp<uint8_t>(config.instrumentEntryBytes, 5, 6);
-    const uint32_t address = static_cast<uint32_t>(config.instrumentHeaders) +
-                             static_cast<uint32_t>(instrument.id) * static_cast<uint32_t>(entrySize);
+
+    // Custom (song-scoped) instruments live at their originalAddr (immediately after the song's
+    // sequence data), not in the global table — use that address directly.
+    uint32_t address = 0;
+    if (instrument.songId.has_value()) {
+        if (instrument.originalAddr == 0) {
+            return;
+        }
+        address = instrument.originalAddr;
+    } else {
+        if (config.instrumentHeaders == 0) {
+            return;
+        }
+        address = static_cast<uint32_t>(config.instrumentHeaders) +
+                  static_cast<uint32_t>(instrument.id) * static_cast<uint32_t>(entrySize);
+    }
     if (address + entrySize > kAramSize) {
         return;
     }
@@ -59,16 +73,20 @@ void writeOverlayInstrumentToAram(NspcProject& project, const NspcInstrument& in
         const int percussionCount =
             static_cast<int>(commandMap.percussionEnd) - static_cast<int>(commandMap.percussionStart) + 1;
         if (instrument.id < percussionCount) {
+            const uint8_t percEntrySize = std::clamp<uint8_t>(config.percussionEntryBytes, 6, 7);
             const uint32_t percussionAddress =
-                static_cast<uint32_t>(config.percussionHeaders) + static_cast<uint32_t>(instrument.id) * 6u;
-            if (percussionAddress + 6u <= kAramSize) {
+                static_cast<uint32_t>(config.percussionHeaders) + static_cast<uint32_t>(instrument.id) * percEntrySize;
+            if (percussionAddress + percEntrySize <= kAramSize) {
                 const uint16_t percussionBase = static_cast<uint16_t>(percussionAddress);
                 aram.write(percussionBase + 0u, instrument.sampleIndex);
                 aram.write(percussionBase + 1u, instrument.adsr1);
                 aram.write(percussionBase + 2u, instrument.adsr2);
                 aram.write(percussionBase + 3u, instrument.gain);
                 aram.write(percussionBase + 4u, instrument.basePitchMult);
-                aram.write(percussionBase + 5u, instrument.percussionNote);
+                if (percEntrySize >= 7) {
+                    aram.write(percussionBase + 5u, instrument.fracPitchMult);
+                }
+                aram.write(static_cast<uint16_t>(percussionBase + percEntrySize - 1u), instrument.percussionNote);
             }
         }
     }
@@ -1313,7 +1331,7 @@ std::expected<NspcSong, std::string> parseSong(const json& value) {
 }
 
 json serializeInstrument(const NspcInstrument& instrument) {
-    return json{
+    json out{
         {"id", instrument.id},
         {"name", instrument.name},
         {"sampleIndex", instrument.sampleIndex},
@@ -1326,6 +1344,10 @@ json serializeInstrument(const NspcInstrument& instrument) {
         {"originalAddr", instrument.originalAddr},
         {"contentOrigin", contentOriginToString(instrument.contentOrigin)},
     };
+    if (instrument.songId.has_value()) {
+        out["songId"] = *instrument.songId;
+    }
+    return out;
 }
 
 std::expected<NspcInstrument, std::string> parseInstrument(const json& value) {
@@ -1363,6 +1385,9 @@ std::expected<NspcInstrument, std::string> parseInstrument(const json& value) {
         return std::unexpected("Instrument entry has invalid originalAddr");
     }
     instrument.contentOrigin = parseContentOrigin(value.value("contentOrigin", "user"));
+    if (value.contains("songId") && value["songId"].is_number_integer()) {
+        instrument.songId = value["songId"].get<int>();
+    }
     return instrument;
 }
 
@@ -1671,8 +1696,10 @@ std::expected<void, std::string> applyProjectIrOverlay(NspcProject& project, con
 
     auto& instruments = project.instruments();
     for (const auto& incomingInstrument : overlay.instruments) {
+        // Song-scoped instruments are uniquely identified by (id, songId); global instruments by id alone.
         auto it = std::find_if(instruments.begin(), instruments.end(), [&](const NspcInstrument& instrument) {
-            return instrument.id == incomingInstrument.id;
+            return instrument.id == incomingInstrument.id &&
+                   instrument.songId == incomingInstrument.songId;
         });
         if (it == instruments.end()) {
             instruments.push_back(incomingInstrument);
@@ -1680,8 +1707,21 @@ std::expected<void, std::string> applyProjectIrOverlay(NspcProject& project, con
             *it = incomingInstrument;
         }
     }
-    std::sort(instruments.begin(), instruments.end(),
-              [](const NspcInstrument& lhs, const NspcInstrument& rhs) { return lhs.id < rhs.id; });
+    // Sort by id first, then by songId so global instruments (no songId) appear before song-scoped
+    // ones with the same id.
+    std::sort(instruments.begin(), instruments.end(), [](const NspcInstrument& lhs, const NspcInstrument& rhs) {
+        if (lhs.id != rhs.id) {
+            return lhs.id < rhs.id;
+        }
+        // nullopt (global) sorts before any songId value.
+        if (!lhs.songId.has_value() && rhs.songId.has_value()) {
+            return true;
+        }
+        if (lhs.songId.has_value() && !rhs.songId.has_value()) {
+            return false;
+        }
+        return lhs.songId < rhs.songId;
+    });
 
     auto& samples = project.samples();
     for (const auto& incomingSample : overlay.samples) {

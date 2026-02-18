@@ -100,6 +100,8 @@ struct NspcEngineConfig {
     uint8_t songTriggerPort = 0;
     uint8_t songTriggerOffset = 1;
     uint8_t instrumentEntryBytes = 6;
+    uint8_t percussionEntryBytes = 6;
+    std::optional<uint8_t> customInstrumentStartIndex = std::nullopt;
     uint16_t echoBuffer = 0;
     uint16_t echoBufferLen = 0;
     std::vector<uint8_t> engineBytes;

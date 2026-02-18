@@ -638,6 +638,13 @@ NspcEngineConfig parseEngineConfigEntry(const json& item) {
         const uint16_t parsedSize = parseHexJson(item["instrumentEntryBytes"]);
         config.instrumentEntryBytes = static_cast<uint8_t>(std::clamp<uint16_t>(parsedSize, 5U, 6U));
     }
+    if (item.contains("percussionEntryBytes")) {
+        const uint16_t parsedSize = parseHexJson(item["percussionEntryBytes"]);
+        config.percussionEntryBytes = static_cast<uint8_t>(std::clamp<uint16_t>(parsedSize, 6U, 7U));
+    }
+    if (item.contains("customInstrumentStartIndex")) {
+        config.customInstrumentStartIndex = static_cast<uint8_t>(parseHexJson(item["customInstrumentStartIndex"]) & 0xFFU);
+    }
     config.echoBuffer = item.contains("echoBuffer") ? parseHexJson(item["echoBuffer"]) : 0;
     config.echoBufferLen = item.contains("echoBufferLen") ? parseHexJson(item["echoBufferLen"]) : 0;
     if (item.contains("engineBytes") && item["engineBytes"].is_string()) {
@@ -765,7 +772,7 @@ NspcEngineConfig resolveEngineConfigPointers(const NspcEngineConfig& config, std
         resolved.percussionHeaders = static_cast<uint16_t>(*percussionLo | (static_cast<uint16_t>(*percussionHi) << 8));
     }
 
-    if (config.engineVariant == "addmusick") {
+    if (config.engineVariant == "addmusick" && !config.songIndexPtr.has_value()) {
         resolveAddmusickSongIndexPointer(resolved, aram);
     } else if (config.songIndexPtr.has_value()) {
         if (const auto songIndex = readAramWord(aram, *config.songIndexPtr); songIndex.has_value()) {

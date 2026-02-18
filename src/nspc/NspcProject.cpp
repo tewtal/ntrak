@@ -22,7 +22,7 @@ constexpr uint32_t kMaxInstruments = 64;
 constexpr uint32_t kMaxBrrBlocksPerSample = 0x2000;
 constexpr size_t kMaxSongEntries = 256;
 constexpr uint32_t kSequenceProbeLimit = 128;
-constexpr uint32_t kTrackProbeLimit = 256;
+constexpr uint32_t kTrackProbeLimit = 16384;
 
 void insertIfValid(std::unordered_set<uint16_t>& pointers, uint16_t pointer) {
     if (pointer != 0 && pointer != 0xFFFF) {
@@ -521,9 +521,22 @@ void applyPercussionTableNotes(std::vector<NspcInstrument>& instruments, emulati
         return;
     }
 
-    for (int i = 0; i < percussionCount; ++i) {
-        const uint32_t entryAddr = static_cast<uint32_t>(config.percussionHeaders) + static_cast<uint32_t>(i) * 6u;
-        if (entryAddr + 6u > kAramSize) {
+    // Cap percussion entries so they don't overflow into custom instrument territory.
+    const int maxPercEntries =
+        config.customInstrumentStartIndex.has_value()
+            ? std::min(percussionCount,
+                       static_cast<int>(*config.customInstrumentStartIndex) - static_cast<int>(percussionStartInstId))
+            : percussionCount;
+    if (maxPercEntries <= 0) {
+        return;
+    }
+
+    const uint8_t percEntrySize = std::clamp<uint8_t>(config.percussionEntryBytes, 6, 7);
+
+    for (int i = 0; i < maxPercEntries; ++i) {
+        const uint32_t entryAddr = static_cast<uint32_t>(config.percussionHeaders) +
+                                   static_cast<uint32_t>(i) * percEntrySize;
+        if (entryAddr + percEntrySize > kAramSize) {
             break;
         }
 
@@ -532,7 +545,11 @@ void applyPercussionTableNotes(std::vector<NspcInstrument>& instruments, emulati
         const uint8_t adsr2 = aramView.read(static_cast<uint16_t>(entryAddr + 2u));
         const uint8_t gain = aramView.read(static_cast<uint16_t>(entryAddr + 3u));
         const uint8_t basePitch = aramView.read(static_cast<uint16_t>(entryAddr + 4u));
-        const uint8_t note = aramView.read(static_cast<uint16_t>(entryAddr + 5u));
+        uint8_t fracPitch = 0;
+        if (percEntrySize >= 7) {
+            fracPitch = aramView.read(static_cast<uint16_t>(entryAddr + 5u));
+        }
+        const uint8_t note = aramView.read(static_cast<uint16_t>(entryAddr + percEntrySize - 1u));
 
         const bool allFF = (sampleIndex == 0xFF && adsr1 == 0xFF && adsr2 == 0xFF && gain == 0xFF &&
                             basePitch == 0xFF && note == 0xFF);
@@ -554,7 +571,7 @@ void applyPercussionTableNotes(std::vector<NspcInstrument>& instruments, emulati
         inst.adsr2 = adsr2;
         inst.gain = gain;
         inst.basePitchMult = basePitch;
-        inst.fracPitchMult = 0;
+        inst.fracPitchMult = fracPitch;
         inst.percussionNote = note;
         inst.originalAddr = static_cast<uint16_t>(entryAddr);
         inst.contentOrigin = defaultContentOrigin(inst.id, config.defaultEngineProvidedInstrumentIds,
@@ -655,6 +672,9 @@ bool probeTrackStream(emulation::AramView aram, uint16_t trackAddr, const NspcCo
     uint32_t addr = trackAddr;
     for (uint32_t steps = 0; steps < kTrackProbeLimit && addr < kAramSize; ++steps) {
         const uint8_t byte = aram.read(static_cast<uint16_t>(addr));
+
+        std::printf("Probe step %u: Read byte %02X at address %04X\n", steps, byte, addr);
+
         if (byte == 0x00) {
             return true;
         }
@@ -815,8 +835,13 @@ void NspcProject::parseInstruments() {
     const uint32_t scanEnd = computeInstrumentTableScanEnd(engineConfig_, entrySize);
     uint32_t addr = engineConfig_.instrumentHeaders;
     bool seenNonEmptyEntry = false;
+    // If customInstrumentStartIndex is set, the global table only covers indices below that split
+    // point — entries at and beyond it live in the per-song custom instrument header instead.
+    const int globalTableLimit = engineConfig_.customInstrumentStartIndex.has_value()
+                                     ? static_cast<int>(*engineConfig_.customInstrumentStartIndex)
+                                     : static_cast<int>(kMaxInstruments);
     // Parse full table (up to engine max). Some SPCs contain sparse entries with zero-filled holes.
-    for (int instId = 0; instId < static_cast<int>(kMaxInstruments) && addr + entrySize <= scanEnd;
+    for (int instId = 0; instId < globalTableLimit && addr + entrySize <= scanEnd;
          ++instId, addr += entrySize) {
         uint8_t sampleIndex = aramView.read(static_cast<uint16_t>(addr));
         uint8_t adsr1 = aramView.read(static_cast<uint16_t>(addr + 1u));
@@ -878,18 +903,32 @@ void NspcProject::parseInstruments() {
 }
 
 void NspcProject::parseExtendedInstruments(emulation::AramView aramView, uint8_t entrySize) {
-    // Addmusick places extra instrument entries after the last song's sequence data.
-    // Scan from each song's sequenceEndAddr for additional instrument table entries.
+    // Addmusick places extra instrument entries after each song's sequence data.
+    // Each song independently defines instruments starting at customInstrumentStartIndex,
+    // so multiple songs can legitimately share the same instrument ID.
+    // The unique key for a song-scoped instrument is (songId, id).
 
-    std::unordered_set<int> existingInstrumentIds;
-    existingInstrumentIds.reserve(instruments_.size());
+    // Track already-parsed (songId, instId) pairs to avoid duplicates.
+    std::unordered_set<int> globalInstrumentIds;
+    globalInstrumentIds.reserve(instruments_.size());
     for (const auto& inst : instruments_) {
-        existingInstrumentIds.insert(inst.id);
+        if (!inst.songId.has_value()) {
+            globalInstrumentIds.insert(inst.id);
+        }
     }
 
-    int nextExtendedId = 0;
-    if (!instruments_.empty()) {
-        nextExtendedId = instruments_.back().id + 1;
+    // The base ID for custom instruments — same starting point for every song.
+    const int customStartId = engineConfig_.customInstrumentStartIndex.has_value()
+                                  ? static_cast<int>(*engineConfig_.customInstrumentStartIndex)
+                                  : (!instruments_.empty() ? instruments_.back().id + 1 : 0);
+
+    // Track which (songId, instId) pairs have already been added.
+    std::unordered_set<int64_t> parsedSongInstKeys;
+    for (const auto& inst : instruments_) {
+        if (inst.songId.has_value()) {
+            const int64_t key = (static_cast<int64_t>(*inst.songId) << 32) | static_cast<int64_t>(inst.id);
+            parsedSongInstKeys.insert(key);
+        }
     }
 
     for (const auto& song : songs_) {
@@ -900,6 +939,8 @@ void NspcProject::parseExtendedInstruments(emulation::AramView aramView, uint8_t
 
         uint32_t addr = seqEnd;
         constexpr uint32_t kMaxExtendedInstruments = 32U;
+        // Each song's custom instruments start at customStartId independently.
+        int nextId = customStartId;
 
         for (uint32_t i = 0; i < kMaxExtendedInstruments && addr + entrySize <= 0x10000U; ++i, addr += entrySize) {
             const uint8_t sampleIndex = aramView.read(static_cast<uint16_t>(addr));
@@ -929,8 +970,14 @@ void NspcProject::parseExtendedInstruments(emulation::AramView aramView, uint8_t
                 break;
             }
 
-            const int instId = nextExtendedId++;
-            if (existingInstrumentIds.contains(instId)) {
+            const int instId = nextId++;
+            // Skip if this (songId, instId) pair was already added (e.g. from a saved project overlay).
+            const int64_t key = (static_cast<int64_t>(song.songId()) << 32) | static_cast<int64_t>(instId);
+            if (parsedSongInstKeys.contains(key)) {
+                continue;
+            }
+            // Don't shadow a global instrument with the same id.
+            if (globalInstrumentIds.contains(instId)) {
                 continue;
             }
 
@@ -945,9 +992,10 @@ void NspcProject::parseExtendedInstruments(emulation::AramView aramView, uint8_t
             inst.percussionNote = 0;
             inst.originalAddr = static_cast<uint16_t>(addr);
             inst.contentOrigin = NspcContentOrigin::UserProvided;
+            inst.songId = song.songId();
 
             instruments_.push_back(std::move(inst));
-            existingInstrumentIds.insert(instId);
+            parsedSongInstKeys.insert(key);
         }
     }
 }
