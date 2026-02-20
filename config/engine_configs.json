@@ -1,5 +1,38 @@
 [
     {
+        "id": "openspc",
+        "name": "opeNSPC",
+        "entryPoint": "0x0400",
+        "sampleHeaders": "0x2400",
+        "instrumentHeaders": "0x2580",
+        "songIndexPointers": "0x2500",
+        "echoBuffer": "0xFFFF",
+        "echoBufferLen": "0x0000",
+        "engineBytes": "5F",
+        "reserved": [
+            {
+                "name": "Engine",
+                "from": "0x0400",
+                "to": "0x2400"
+            },
+            {
+                "name": "RAM",
+                "from": "0x0000",
+                "to": "0x0400"
+            }
+        ],
+        "playbackHooks": {
+            "tickTrigger": {
+                "op": "write",
+                "address": "0x0035"
+            },
+            "patternTrigger": {
+                "op": "write",
+                "address": "0x0036"
+            }
+        }        
+    },
+    {
         "id": "super_metroid",
         "name": "Super Metroid",
         "entryPoint": "0x1500",
