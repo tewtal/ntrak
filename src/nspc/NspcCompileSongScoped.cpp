@@ -354,6 +354,52 @@ std::expected<NspcCompileOutput, std::string> buildSongScopedUpload(NspcProject&
         .label = std::format("Song {:02X} Sequence", songIndex),
     });
 
+    // For engines with a custom instrument split (e.g. AddmusicK), instruments with id >=
+    // customInstrumentStartIndex are stored immediately after the song's sequence data rather
+    // than in the global table. Append them here so they follow the compiled sequence bytes.
+    if (engine.customInstrumentStartIndex.has_value()) {
+        const uint8_t customEntrySize = std::clamp<uint8_t>(engine.instrumentEntryBytes, 5, 6);
+        // Collect custom instruments belonging to this song, in ascending id order.
+        std::vector<const NspcInstrument*> customInsts;
+        for (const auto& inst : project.instruments()) {
+            if (inst.songId.has_value() && *inst.songId == songId &&
+                inst.id >= static_cast<int>(*engine.customInstrumentStartIndex)) {
+                customInsts.push_back(&inst);
+            }
+        }
+        std::sort(customInsts.begin(), customInsts.end(),
+                  [](const NspcInstrument* a, const NspcInstrument* b) { return a->id < b->id; });
+
+        // sequenceAddr + last pushed chunk size = end of sequence
+        const uint16_t seqEnd = static_cast<uint16_t>(
+            static_cast<uint32_t>(sequenceAddr) +
+            static_cast<uint32_t>(upload.chunks.back().bytes.size()));
+
+        uint16_t customAddr = seqEnd;
+        for (const auto* inst : customInsts) {
+            if (static_cast<uint32_t>(customAddr) + customEntrySize > kAramSize) {
+                return std::unexpected(
+                    std::format("Custom instrument {:02X} write at ${:04X} exceeds ARAM bounds", inst->id, customAddr));
+            }
+            std::vector<uint8_t> instBytes;
+            instBytes.reserve(customEntrySize);
+            instBytes.push_back(inst->sampleIndex);
+            instBytes.push_back(inst->adsr1);
+            instBytes.push_back(inst->adsr2);
+            instBytes.push_back(inst->gain);
+            instBytes.push_back(inst->basePitchMult);
+            if (customEntrySize >= 6) {
+                instBytes.push_back(inst->fracPitchMult);
+            }
+            upload.chunks.push_back(NspcUploadChunk{
+                .address = customAddr,
+                .bytes = std::move(instBytes),
+                .label = std::format("Song {:02X} Custom Inst {:02X}", songIndex, inst->id),
+            });
+            customAddr = static_cast<uint16_t>(static_cast<uint32_t>(customAddr) + customEntrySize);
+        }
+    }
+
     for (const auto& pattern : song.patterns()) {
         const auto patternAddrIt = patternAddrById.find(pattern.id);
         if (patternAddrIt == patternAddrById.end()) {

@@ -1058,20 +1058,45 @@ void AssetsPanel::drawInstrumentsTab() {
 
     auto& project = *appState_.project;
     auto& instruments = project.instruments();
-    const int userInstrumentCount = static_cast<int>(
-        std::count_if(instruments.begin(), instruments.end(), [](const nspc::NspcInstrument& instrument) {
-            return instrument.contentOrigin == nspc::NspcContentOrigin::UserProvided;
-        }));
-    const int engineInstrumentCount = static_cast<int>(instruments.size()) - userInstrumentCount;
 
-    if (findInstrumentIndexById(appState_.selectedInstrumentId).has_value()) {
+    // Determine the currently selected song's ID so we can filter song-scoped instruments.
+    std::optional<int> currentSongId;
+    const auto& songs = project.songs();
+    if (appState_.selectedSongIndex >= 0 && appState_.selectedSongIndex < static_cast<int>(songs.size())) {
+        currentSongId = songs[appState_.selectedSongIndex].songId();
+    }
+
+    // Build a view of instruments relevant to the current song: global instruments (no songId)
+    // plus those belonging to the currently selected song.
+    std::vector<const nspc::NspcInstrument*> visibleInstruments;
+    visibleInstruments.reserve(instruments.size());
+    for (const auto& inst : instruments) {
+        if (!inst.songId.has_value() || inst.songId == currentSongId) {
+            visibleInstruments.push_back(&inst);
+        }
+    }
+
+    const int userInstrumentCount = static_cast<int>(
+        std::count_if(visibleInstruments.begin(), visibleInstruments.end(), [](const nspc::NspcInstrument* instrument) {
+            return instrument->contentOrigin == nspc::NspcContentOrigin::UserProvided;
+        }));
+    const int engineInstrumentCount = static_cast<int>(visibleInstruments.size()) - userInstrumentCount;
+
+    // Helper: check whether an instrument id is visible in the current song context.
+    const auto isVisible = [&](int id) {
+        return std::any_of(visibleInstruments.begin(), visibleInstruments.end(),
+                           [id](const nspc::NspcInstrument* inst) { return inst->id == id; });
+    };
+
+    if (findInstrumentIndexById(appState_.selectedInstrumentId).has_value() &&
+        isVisible(appState_.selectedInstrumentId)) {
         selectedInstrumentId_ = appState_.selectedInstrumentId;
     }
-    if (!findInstrumentIndexById(selectedInstrumentId_).has_value()) {
+    if (!findInstrumentIndexById(selectedInstrumentId_).has_value() || !isVisible(selectedInstrumentId_)) {
         selectedInstrumentId_ = -1;
     }
-    if (selectedInstrumentId_ < 0 && !instruments.empty()) {
-        selectedInstrumentId_ = instruments.front().id;
+    if (selectedInstrumentId_ < 0 && !visibleInstruments.empty()) {
+        selectedInstrumentId_ = visibleInstruments.front()->id;
     }
     appState_.selectedInstrumentId = selectedInstrumentId_;
     const auto selectedInstrumentIndex = findInstrumentIndexById(selectedInstrumentId_);
@@ -1189,7 +1214,8 @@ void AssetsPanel::drawInstrumentsTab() {
         ImGui::TableSetupColumn("Sample", ImGuiTableColumnFlags_WidthFixed, 60.0f);
         ImGui::TableHeadersRow();
 
-        for (const auto& instrument : instruments) {
+        for (const auto* instrumentPtr : visibleInstruments) {
+            const auto& instrument = *instrumentPtr;
             ImGui::PushID(instrument.id);
             ImGui::TableNextRow();
 

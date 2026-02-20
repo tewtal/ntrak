@@ -17,6 +17,7 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
     NspcBuildOptions songBuildOptions = options;
     songBuildOptions.includeEngineExtensions = false;
     const uint8_t instrumentEntrySize = std::clamp<uint8_t>(engine.instrumentEntryBytes, 5, 6);
+    const uint8_t percEntrySize = std::clamp<uint8_t>(engine.percussionEntryBytes, 6, 7);
     const bool isSmwV00Engine = (engine.engineVersion == "0.0");
     const auto commandMap = engine.commandMap.value_or(NspcCommandMap{});
     const int percussionCount = static_cast<int>(commandMap.percussionEnd) -
@@ -41,7 +42,7 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
     if (engine.instrumentHeaders != 0) {
         for (auto& instrument : project.instruments()) {
             if (instrument.contentOrigin != NspcContentOrigin::UserProvided || instrument.id < 0 ||
-                instrument.originalAddr != 0) {
+                instrument.originalAddr != 0 || instrument.songId.has_value()) {
                 continue;
             }
             const uint32_t address = static_cast<uint32_t>(engine.instrumentHeaders) +
@@ -72,6 +73,11 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
 
     for (const auto& instrument : project.instruments()) {
         if (instrument.contentOrigin != NspcContentOrigin::UserProvided) {
+            continue;
+        }
+        // Custom instruments (those with a songId) are emitted directly after their song's
+        // sequence data by buildSongScopedUpload — skip them here.
+        if (instrument.songId.has_value()) {
             continue;
         }
         if (engine.instrumentHeaders == 0) {
@@ -108,19 +114,22 @@ std::expected<NspcUploadList, std::string> buildUserContentUpload(NspcProject& p
 
         if (isSmwV00Engine && engine.percussionHeaders != 0 && instrument.id >= 0 && instrument.id < percussionCount) {
             const uint32_t percussionAddress = static_cast<uint32_t>(engine.percussionHeaders) +
-                                               static_cast<uint32_t>(instrument.id) * 6u;
-            if (percussionAddress + 6u > kAramSize) {
+                                               static_cast<uint32_t>(instrument.id) * percEntrySize;
+            if (percussionAddress + percEntrySize > kAramSize) {
                 return std::unexpected(std::format("Percussion instrument {:02X} write at ${:04X} exceeds ARAM bounds",
                                                    instrument.id, static_cast<uint16_t>(percussionAddress & 0xFFFFu)));
             }
 
             std::vector<uint8_t> percussionBytes;
-            percussionBytes.reserve(6);
+            percussionBytes.reserve(percEntrySize);
             percussionBytes.push_back(instrument.sampleIndex);
             percussionBytes.push_back(instrument.adsr1);
             percussionBytes.push_back(instrument.adsr2);
             percussionBytes.push_back(instrument.gain);
             percussionBytes.push_back(instrument.basePitchMult);
+            if (percEntrySize >= 7) {
+                percussionBytes.push_back(instrument.fracPitchMult);
+            }
             percussionBytes.push_back(instrument.percussionNote);
 
             upload.chunks.push_back(NspcUploadChunk{

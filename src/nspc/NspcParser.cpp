@@ -84,10 +84,10 @@ std::expected<NspcProject, NspcParseError> NspcParser::load(std::span<const std:
             uint16_t defaultDspTable = aram[matchingConfig->defaultDspTablePtr.value()];
             defaultDspTable |= aram[matchingConfig->defaultDspTablePtr.value() + 1] << 8U;
 
-            aram[defaultDspTable + 10] = dspDir;
-            aram[defaultDspTable + 11] = dspEsa;
-            spcData[defaultDspTable + 0x100 + 10] = dspDir;
-            spcData[defaultDspTable + 0x100 + 11] = dspEsa;
+            aram[defaultDspTable + 9] = dspDir;
+            aram[defaultDspTable + 10] = dspEsa;
+            spcData[defaultDspTable + 0x100 + 9] = dspDir;
+            spcData[defaultDspTable + 0x100 + 10] = dspEsa;
         }
     }
 

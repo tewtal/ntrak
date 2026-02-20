@@ -370,6 +370,9 @@ struct NspcInstrument {
     std::string name;
     uint16_t originalAddr;
     NspcContentOrigin contentOrigin = NspcContentOrigin::EngineProvided;
+    // Set for custom instruments (id >= customInstrumentStartIndex) that live after a song's
+    // sequence data rather than in the global instrument table.
+    std::optional<int> songId = std::nullopt;
 };
 
 class NspcSong {

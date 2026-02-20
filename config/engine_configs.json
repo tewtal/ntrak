@@ -631,12 +631,14 @@
         "engineVersion": "0.0",
         "engineVariant": "addmusick",
         "defaultDspTablePtr": "0x041C",
-        "instrumentHeaderPtrLo": "0x0D9D",
-        "instrumentHeaderPtrHi": "0x0DA0",
+        "instrumentHeaderPtrLo": "0x0DF5",
+        "instrumentHeaderPtrHi": "0x0DF8",
+        "percussionHeaderPtrLo": "0x0D9D",
+        "percussionHeaderPtrHi": "0x0DA0",
+        "customInstrumentStartIndex": "0x1E",
+        "percussionEntryBytes": 7,
         "echoBufferLen": "0x0000",
-        "songIndexPtr": "0x0A20",
         "songTriggerPort": "0x02",
-        "instrumentEntryBytes": 5,
         "engineBytes": "20 CD CF BD E8 00 FD D6 00 01 D6 00 02 D6 00 03",
         "reserved": [
             {
@@ -677,7 +679,33 @@
                 "hooks": [],
                 "vcmds": [
                     {
-                        "id": "0xF3",
+                        "id": "0x06",
+                        "name": "Second Loop",
+                        "description": "Second Loop",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x0D",
+                        "name": "ADSR",
+                        "description": "ADSR",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x13",
                         "name": "Sample Upload",
                         "description": "Sample Upload",
                         "parameters": [
@@ -692,7 +720,7 @@
                         ]
                     },
                     {
-                        "id": "0xF4",
+                        "id": "0x14",
                         "name": "Misc Command",
                         "description": "Misc",
                         "parameters": [
@@ -703,7 +731,7 @@
                         ]
                     },
                     {
-                        "id": "0xF5",
+                        "id": "0x15",
                         "name": "FIR Filter Command",
                         "description": "FIR Filter",
                         "parameters": [
@@ -742,7 +770,7 @@
                         ]
                     },
                     {
-                        "id": "0xFA",
+                        "id": "0x1A",
                         "name": "ExtFA",
                         "description": "Extensions (PitchMod/Gain/Transpos/Amplify/EchoBuffer/GainOld)",
                         "parameters": [
@@ -757,7 +785,7 @@
                         ]
                     },
                     {
-                        "id": "0xFB",
+                        "id": "0x1B",
                         "name": "Arpeggio",
                         "description": "Arpeggio",
                         "parameters": [
@@ -772,7 +800,7 @@
                         ]
                     },
                     {
-                        "id": "0xFC",
+                        "id": "0x1C",
                         "name": "Callback",
                         "description": "Callback",
                         "parameters": [
@@ -785,18 +813,6 @@
                                 "type": "byte"
                             }
                         ]
-                    },
-                    {
-                        "id": "0xFD",
-                        "name": "Tremolo Off",
-                        "description": "Tremolo Off",
-                        "parameters": []
-                    },
-                    {
-                        "id": "0xFE",
-                        "name": "Pitch Envelope Off",
-                        "description": "Pitch Envelope Off",
-                        "parameters": []
                     }
                 ]
             }
@@ -825,22 +841,38 @@
                 "0xE2": "0xE7",
                 "0xE3": "0xE8",
                 "0xE4": "0xE9",
+                "0xE6": "0x06",
                 "0xE5": "0xEB",
-                "0xE6": "0xEC",
                 "0xE7": "0xED",
                 "0xE8": "0xEE",
                 "0xE9": "0xEF",
                 "0xEA": "0xF0",
                 "0xEB": "0xF1",
                 "0xEC": "0xF2",
-                "0xED": "0xF3",
+                "0xED": "0x0D",
                 "0xEE": "0xF4",
                 "0xEF": "0xF5",
                 "0xF0": "0xF6",
                 "0xF1": "0xF7",
-                "0xF2": "0xF8"
+                "0xF2": "0xF8",
+                "0xF3": "0x13",
+                "0xF4": "0x14",
+                "0xF5": "0x15",
+                "0xFA": "0x1A",
+                "0xFB": "0x1B",
+                "0xFC": "0x1C",
+                "0xFD": "0xEC",
+                "0xFE": "0xF3"
             },
             "writeVcmdMap": {
+                "0x06": "0xE6",
+                "0x0D": "0xED",
+                "0x13": "0xF3",
+                "0x14": "0xF4",
+                "0x15": "0xF5",
+                "0x1A": "0xFA",
+                "0x1B": "0xFB",
+                "0x1C": "0xFC",
                 "0xE0": "0xDA",
                 "0xE1": "0xDB",
                 "0xE2": "0xDC",
@@ -852,14 +884,14 @@
                 "0xE8": "0xE3",
                 "0xE9": "0xE4",
                 "0xEB": "0xE5",
-                "0xEC": "0xE6",
+                "0xEC": "0xFD",
                 "0xED": "0xE7",
                 "0xEE": "0xE8",
                 "0xEF": "0xE9",
                 "0xF0": "0xEA",
                 "0xF1": "0xEB",
                 "0xF2": "0xEC",
-                "0xF3": "0xED",
+                "0xF3": "0xFE",
                 "0xF4": "0xEE",
                 "0xF5": "0xEF",
                 "0xF6": "0xF0",
@@ -870,19 +902,22 @@
         }
     },
     {
-        "id": "super_mario_world_custom",
-        "name": "Super Mario World (Custom)",
+        "id": "super_mario_world_am_variant",
+        "name": "Super Mario World (AddmusicK Variant)",
         "entryPoint": "0x0400",
         "engineVersion": "0.0",
-        "defaultDspTablePtr": "0x041C",
-        "instrumentHeaderPtrLo": "0x0D54",
-        "instrumentHeaderPtrHi": "0x0D57",
-        "percussionHeaderPtrLo": "0x0543",
-        "percussionHeaderPtrHi": "0x0546",
+        "engineVariant": "addmusick",
+        "defaultDspTablePtr": "0x0420",
+        "instrumentHeaderPtrLo": "0x0D78",
+        "instrumentHeaderPtrHi": "0x0D7B",
+        "percussionHeaderPtrLo": "0x0D86",
+        "percussionHeaderPtrHi": "0x0D89",
+        "customInstrumentStartIndex": "0x1E",
         "echoBufferLen": "0x0000",
-        "songIndexPtr": "0x0A85",
+        "songIndexPtr": "0x0A8C",
         "songTriggerPort": "0x02",
-        "instrumentEntryBytes": 5,
+        "instrumentEntryBytes": 6,
+        "percussionEntryBytes": 7,
         "engineBytes": "20 CD CF BD E8 00 8D 00 D6 00 01 FE FB D6 00 02",
         "reserved": [
             {
@@ -914,8 +949,8 @@
         "extensionVcmdPrefix": "0xFF",
         "extensions": [
             {
-                "name": "Unknown VCMD Extension",
-                "description": "F4",
+                "name": "AddmusicK Custom VCMDs",
+                "description": "Custom VCMDs used by AddmusicK.",
                 "code": {
                     "address": "0xFFFF",
                     "bytes": ""
@@ -923,9 +958,130 @@
                 "hooks": [],
                 "vcmds": [
                     {
-                        "id": "0xF4",
-                        "name": "Unknown",
-                        "description": "Who knows",
+                        "id": "0x06",
+                        "name": "Second Loop",
+                        "description": "Second Loop",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x0D",
+                        "name": "ADSR",
+                        "description": "ADSR",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x13",
+                        "name": "Sample Upload",
+                        "description": "Sample Upload",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x14",
+                        "name": "Misc Command",
+                        "description": "Misc",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x15",
+                        "name": "FIR Filter Command",
+                        "description": "FIR Filter",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x1A",
+                        "name": "ExtFA",
+                        "description": "Extensions (PitchMod/Gain/Transpos/Amplify/EchoBuffer/GainOld)",
+                        "parameters": [
+                            {
+                                "name": "Option",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "Value",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x1B",
+                        "name": "Arpeggio",
+                        "description": "Arpeggio",
+                        "parameters": [
+                            {
+                                "name": "?",
+                                "type": "byte"
+                            },
+                            {
+                                "name": "??",
+                                "type": "byte"
+                            }
+                        ]
+                    },
+                    {
+                        "id": "0x1C",
+                        "name": "Callback",
+                        "description": "Callback",
                         "parameters": [
                             {
                                 "name": "?",
@@ -964,22 +1120,38 @@
                 "0xE2": "0xE7",
                 "0xE3": "0xE8",
                 "0xE4": "0xE9",
+                "0xE6": "0x06",
                 "0xE5": "0xEB",
-                "0xE6": "0xEC",
                 "0xE7": "0xED",
                 "0xE8": "0xEE",
                 "0xE9": "0xEF",
                 "0xEA": "0xF0",
                 "0xEB": "0xF1",
                 "0xEC": "0xF2",
-                "0xED": "0xF3",
+                "0xED": "0x0D",
                 "0xEE": "0xF4",
                 "0xEF": "0xF5",
                 "0xF0": "0xF6",
                 "0xF1": "0xF7",
-                "0xF2": "0xF8"
+                "0xF2": "0xF8",
+                "0xF3": "0x13",
+                "0xF4": "0x14",
+                "0xF5": "0x15",
+                "0xFA": "0x1A",
+                "0xFB": "0x1B",
+                "0xFC": "0x1C",
+                "0xFD": "0xEC",
+                "0xFE": "0xF3"
             },
             "writeVcmdMap": {
+                "0x06": "0xE6",
+                "0x0D": "0xED",
+                "0x13": "0xF3",
+                "0x14": "0xF4",
+                "0x15": "0xF5",
+                "0x1A": "0xFA",
+                "0x1B": "0xFB",
+                "0x1C": "0xFC",
                 "0xE0": "0xDA",
                 "0xE1": "0xDB",
                 "0xE2": "0xDC",
@@ -991,14 +1163,14 @@
                 "0xE8": "0xE3",
                 "0xE9": "0xE4",
                 "0xEB": "0xE5",
-                "0xEC": "0xE6",
+                "0xEC": "0xFD",
                 "0xED": "0xE7",
                 "0xEE": "0xE8",
                 "0xEF": "0xE9",
                 "0xF0": "0xEA",
                 "0xF1": "0xEB",
                 "0xF2": "0xEC",
-                "0xF3": "0xED",
+                "0xF3": "0xFE",
                 "0xF4": "0xEE",
                 "0xF5": "0xEF",
                 "0xF6": "0xF0",

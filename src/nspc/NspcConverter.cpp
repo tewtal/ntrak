@@ -123,8 +123,10 @@ std::optional<int> resolveSmwPercussionInstrumentId(const NspcProject& source, u
         return std::nullopt;
     }
 
-    const uint32_t addr = static_cast<uint32_t>(cfg.percussionHeaders) + static_cast<uint32_t>(percussionIndex) * 6u;
-    if (addr + 6u > kAramSize) {
+    const uint8_t percEntrySize = std::clamp<uint8_t>(cfg.percussionEntryBytes, 6, 7);
+    const uint32_t addr = static_cast<uint32_t>(cfg.percussionHeaders) +
+                          static_cast<uint32_t>(percussionIndex) * percEntrySize;
+    if (addr + percEntrySize > kAramSize) {
         return std::nullopt;
     }
 
@@ -134,7 +136,7 @@ std::optional<int> resolveSmwPercussionInstrumentId(const NspcProject& source, u
     const uint8_t adsr2 = aram.read(static_cast<uint16_t>(addr + 2u));
     const uint8_t gain = aram.read(static_cast<uint16_t>(addr + 3u));
     const uint8_t basePitch = aram.read(static_cast<uint16_t>(addr + 4u));
-    const uint8_t note = aram.read(static_cast<uint16_t>(addr + 5u));
+    const uint8_t note = aram.read(static_cast<uint16_t>(addr + percEntrySize - 1u));
 
     for (const auto& inst : source.instruments()) {
         if (inst.sampleIndex == sampleIndex && inst.adsr1 == adsr1 && inst.adsr2 == adsr2 && inst.gain == gain &&
@@ -448,6 +450,7 @@ SongPortResult portSong(const NspcProject& source, NspcProject& target, const So
             newInst.sampleIndex = static_cast<uint8_t>(chosenSampleId);
         }
         newInst.contentOrigin = NspcContentOrigin::UserProvided;
+        newInst.songId = std::nullopt;  // Converted instruments always go into the global table
 
         // Calculate the address in the instrument table and write the entry bytes
         const auto& tgtEngine = target.engineConfig();
@@ -472,15 +475,21 @@ SongPortResult portSong(const NspcProject& source, NspcProject& target, const So
                     const int percussionCount = static_cast<int>(commandMap.percussionEnd) -
                                                 static_cast<int>(commandMap.percussionStart) + 1;
                     if (newInst.id < percussionCount) {
+                        const uint8_t tgtPercEntrySize = std::clamp<uint8_t>(tgtEngine.percussionEntryBytes, 6, 7);
                         const uint32_t percussionAddr =
-                            static_cast<uint32_t>(tgtEngine.percussionHeaders) + static_cast<uint32_t>(newInst.id) * 6u;
-                        if (percussionAddr + 6u <= 0x10000u) {
+                            static_cast<uint32_t>(tgtEngine.percussionHeaders) +
+                            static_cast<uint32_t>(newInst.id) * tgtPercEntrySize;
+                        if (percussionAddr + tgtPercEntrySize <= 0x10000u) {
                             aramView.write(static_cast<uint16_t>(percussionAddr + 0u), newInst.sampleIndex);
                             aramView.write(static_cast<uint16_t>(percussionAddr + 1u), newInst.adsr1);
                             aramView.write(static_cast<uint16_t>(percussionAddr + 2u), newInst.adsr2);
                             aramView.write(static_cast<uint16_t>(percussionAddr + 3u), newInst.gain);
                             aramView.write(static_cast<uint16_t>(percussionAddr + 4u), newInst.basePitchMult);
-                            aramView.write(static_cast<uint16_t>(percussionAddr + 5u), newInst.percussionNote);
+                            if (tgtPercEntrySize >= 7) {
+                                aramView.write(static_cast<uint16_t>(percussionAddr + 5u), newInst.fracPitchMult);
+                            }
+                            aramView.write(static_cast<uint16_t>(percussionAddr + tgtPercEntrySize - 1u),
+                                           newInst.percussionNote);
                         }
                     }
                 }
